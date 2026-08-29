@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stickyburrito’s Prompt Generator</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>.variants-card{padding:20px;margin:30px 0 18px;box-shadow:4px 4px 0 var(--violet)}.variants{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:16px}.variant{padding:13px;border:1.5px solid var(--ink);background:white;text-align:left;cursor:pointer;font-weight:800}.variant small{display:block;margin-top:5px;color:var(--muted);font-weight:500}.variant:hover{background:var(--acid)}@media(max-width:650px){.variants{grid-template-columns:1fr}}</style>
+  <style>.theme-toggle{position:absolute;right:0;top:0;border:1.5px solid var(--ink);background:var(--card);color:var(--ink);padding:9px 12px;font-weight:800;cursor:pointer}[data-theme="dark"]{--ink:#f2f0e7;--paper:#11120f;--card:#1b1d18;--muted:#aaa99e;--line:#41433b;--shadow:6px 6px 0 #6f47ff}[data-theme="dark"] textarea,[data-theme="dark"] input,[data-theme="dark"] select,[data-theme="dark"] .variant,[data-theme="dark"] .suggestions,[data-theme="dark"] .suggestions button{background:#252720;color:#f2f0e7;border-color:#d8d6cb}[data-theme="dark"] .tag{background:#30332a;border-color:#5a5e50}[data-theme="dark"] .lede,[data-theme="dark"] .help p{color:#c0bfb5}</style>
+  <style>
+    [data-theme="dark"]{--ink:#ececf3;--paper:#0d0f15;--card:#171a23;--acid:#c9f36a;--violet:#9183ff;--muted:#9398a8;--line:#303545;--shadow:0 18px 55px rgba(0,0,0,.35)}
+    [data-theme="dark"] body{background:radial-gradient(circle at 75% 0%,rgba(112,85,255,.10),transparent 32rem),linear-gradient(180deg,#0d0f15 0%,#11141c 100%);background-attachment:fixed}
+    [data-theme="dark"] .panel{background:rgba(24,27,37,.96);border:1px solid #343949;border-radius:14px;box-shadow:0 18px 55px rgba(0,0,0,.30)}
+    [data-theme="dark"] .composer{box-shadow:0 24px 70px rgba(0,0,0,.38),0 0 0 1px rgba(145,131,255,.08)}
+    [data-theme="dark"] textarea,[data-theme="dark"] input,[data-theme="dark"] select{background:#10131b;color:#ececf3;border:1px solid #3a4052;border-radius:8px;outline:none;transition:border-color .15s,box-shadow .15s,background .15s}
+    [data-theme="dark"] textarea:focus,[data-theme="dark"] input:focus,[data-theme="dark"] select:focus{background:#131722;border-color:#9183ff;box-shadow:0 0 0 3px rgba(145,131,255,.15)}
+    [data-theme="dark"] textarea::placeholder,[data-theme="dark"] input::placeholder{color:#686e7e}
+    [data-theme="dark"] .theme-toggle{background:#1a1e29;color:#d9d9e4;border:1px solid #3b4152;border-radius:999px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+    [data-theme="dark"] .theme-toggle:hover{border-color:#9183ff;color:#fff}
+    [data-theme="dark"] .mark{background:#9183ff;color:#0d0f15;border-radius:7px;transform:rotate(-4deg);box-shadow:0 6px 18px rgba(112,85,255,.25)}
+    [data-theme="dark"] .lede,[data-theme="dark"] .help p{color:#aeb2c0}
+    [data-theme="dark"] .roll{background:#c9f36a;color:#11140e;border-color:#c9f36a;border-radius:9px;box-shadow:0 10px 28px rgba(173,226,74,.12)}
+    [data-theme="dark"] .roll:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(173,226,74,.18)}
+    [data-theme="dark"] .negative-card{border-color:#6b3745;box-shadow:0 14px 38px rgba(0,0,0,.25)}
+    [data-theme="dark"] .variants-card{box-shadow:0 14px 38px rgba(0,0,0,.25);border-color:#4a426f}
+    [data-theme="dark"] .variant{background:#11141d;color:#e8e8f0;border:1px solid #353b4c;border-radius:9px}
+    [data-theme="dark"] .variant:hover{background:#24283a;border-color:#9183ff}
+    [data-theme="dark"] .tag{background:#282d3b;border:1px solid #3b4255;border-radius:999px;color:#dedee8}
+    [data-theme="dark"] .suggestions,[data-theme="dark"] .suggestions button{background:#171b25;color:#ececf3;border-color:#353b4c}
+    [data-theme="dark"] .suggestions button:hover{background:#292e40}
+  </style>
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <button id="themeToggle" class="theme-toggle" type="button" aria-label="Toggle dark mode">Dark mode</button>
+      <p class="eyebrow">DANBOORU · KREA 2 · MINIMAX H3</p>
+      <div class="hero-art"><img src="assets/stickyburrito-prompt-generator.png" alt="Stickyburrito’s Prompt Generator"></div>
+      <p class="lede slogan" id="slogan" title="Click for another slogan">By gooners, for gooners.</p>
+    </header>
+
+    <section class="composer panel">
+      <label for="idea">What would you like to see?</label>
+      <textarea id="idea" rows="5" placeholder="Ollama is creating a fresh idea…"></textarea>
+      <div class="examples" id="examples" aria-label="Examples">
+        <span>Try:</span>
+        <button data-example="A cute witch with purple hair flying over a moonlit town, dynamic angle, autumn">moonlit witch</button>
+        <button data-example="A lone female astronaut looking at Earth through a spaceship window, dramatic rim light">astronaut portrait</button>
+        <button data-example="Two friends having tea in a cozy cottage, warm morning light, detailed interior">cozy cottage</button>
+      </div>
+      <label class="toggle-field reasoning-toggle">
+        <input id="showThinking" type="checkbox">
+        <span><strong>Show Ollama’s live reasoning</strong><small>Optional debugging view — leave off for faster prompting</small></span>
+      </label>
+      <div class="controls">
+        <label>Prompt engine
+          <select id="engine"><option value="ollama">Local AI (Ollama)</option><option value="rules">Built-in rules</option></select>
+        </label>
+        <label>Local model
+          <input id="model" value="richardyoung/qwen3.6-27b-abliterated:latest" aria-label="Ollama model name">
+        </label>
+        <label>ComfyUI prompt dialect
+          <select id="target"><option value="danbooru">Danbooru tags</option><option value="minimax_h3">MiniMax H3 video</option><option value="krea2">Krea 2 image</option></select>
+        </label>
+        <label id="profileLabel">Checkpoint profile
+          <select id="checkpointProfile"><option value="generic">Generic Danbooru</option><option value="pony_v6">Pony Diffusion V6 XL</option></select>
+        </label>
+        <label>Style
+          <select id="style">
+            <option value="anime">Anime illustration</option>
+            <option value="photo">Photoreal</option>
+            <option value="manga">Manga</option>
+            <option value="painting">Digital painting — hard cel-shaded cartoon</option>
+            <option value="none">No preset</option>
+          </select>
+        </label>
+        <label>Framing
+          <select id="framing">
+            <option value="auto">Infer from text</option>
+            <option value="portrait">Portrait</option>
+            <option value="cowboy">Cowboy shot</option>
+            <option value="full">Full body</option>
+            <option value="wide">Wide shot</option>
+          </select>
+        </label>
+        <label>Quality
+          <select id="quality">
+            <option value="high">High</option>
+            <option value="max">Maximum</option>
+            <option value="none">None</option>
+          </select>
+        </label>
+        <label>Camera / lens
+          <select id="camera"><option value="auto">Auto</option><option value="smartphone camera">Smartphone camera</option><option value="35mm film camera">35mm film camera</option><option value="medium format camera">Medium format</option><option value="cinema camera">Cinema camera</option><option value="instant camera">Instant camera</option><option value="disposable camera">Disposable camera</option><option value="drone camera">Drone camera</option><option value="action camera">Action camera</option><option value="security camera">Security camera</option><option value="fisheye lens">Fisheye lens</option><option value="ultra wide-angle lens">Ultra-wide lens</option><option value="24mm wide-angle lens">24mm wide lens</option><option value="35mm documentary lens">35mm documentary</option><option value="50mm standard lens">50mm standard</option><option value="85mm portrait lens">85mm portrait</option><option value="135mm telephoto lens">135mm telephoto</option><option value="macro lens">Macro lens</option><option value="tilt-shift lens">Tilt-shift lens</option><option value="anamorphic lens">Anamorphic lens</option></select>
+        </label>
+        <label>Location
+          <select id="location"><option value="auto">Auto</option><option value="cozy living room">Cozy living room</option><option value="modern bedroom">Modern bedroom</option><option value="small apartment kitchen">Apartment kitchen</option><option value="neon city street">Neon city street</option><option value="rainy alley">Rainy alley</option><option value="rooftop at sunset">Rooftop at sunset</option><option value="quiet cafe">Quiet café</option><option value="school classroom">Classroom</option><option value="library interior">Library</option><option value="train carriage">Train carriage</option><option value="subway platform">Subway platform</option><option value="sunny beach">Sunny beach</option><option value="dense forest">Dense forest</option><option value="mountain overlook">Mountain overlook</option><option value="flower field">Flower field</option><option value="medieval castle hall">Castle hall</option><option value="spaceship interior">Spaceship interior</option><option value="cyberpunk nightclub">Cyberpunk nightclub</option><option value="professional photo studio">Photo studio</option></select>
+        </label>
+        <label>Angle / composition
+          <select id="angle"><option value="auto">Auto</option><option value="eye-level front view">Eye-level front</option><option value="three-quarter view">Three-quarter view</option><option value="side profile view">Side profile</option><option value="rear view">Rear view</option><option value="high-angle view">High angle</option><option value="low-angle view">Low angle</option><option value="bird's-eye view">Bird's-eye view</option><option value="worm's-eye view">Worm's-eye view</option><option value="over-the-shoulder shot">Over-the-shoulder</option><option value="point-of-view shot">POV shot</option><option value="dutch angle">Dutch angle</option><option value="symmetrical composition">Symmetrical</option><option value="rule-of-thirds composition">Rule of thirds</option><option value="centered composition">Centered</option><option value="extreme close-up">Extreme close-up</option><option value="close-up portrait">Close-up</option><option value="medium two-shot">Medium two-shot</option><option value="full-body shot">Full body</option><option value="wide establishing shot">Wide establishing</option></select>
+        </label>
+        <label>Pose / action
+          <select id="pose"><option value="auto">Auto</option><option value="standing naturally">Standing naturally</option><option value="sitting relaxed">Sitting relaxed</option><option value="reclining">Reclining</option><option value="walking">Walking</option><option value="running">Running</option><option value="kneeling">Kneeling</option><option value="crouching">Crouching</option><option value="leaning against a wall">Leaning on wall</option><option value="arms crossed">Arms crossed</option><option value="hands on hips">Hands on hips</option><option value="hands in pockets">Hands in pockets</option><option value="looking over shoulder">Looking over shoulder</option><option value="reaching toward camera">Reaching toward camera</option><option value="dynamic action pose">Dynamic action</option><option value="dancing">Dancing</option><option value="jumping">Jumping</option><option value="lying on back">Lying on back</option><option value="hugging">Hugging</option><option value="candid conversation">Candid conversation</option></select>
+        </label>
+        <label>Actors / people
+          <select id="actors"><option value="auto">Auto</option><option value="one actor">One actor</option><option value="two actors">Two actors</option><option value="three actors">Three actors</option><option value="small group">Small group</option></select>
+        </label>
+        <label>Interaction
+          <select id="interaction"><option value="auto">Auto</option><option value="standing side by side">Standing side by side</option><option value="sitting together">Sitting together</option><option value="talking to each other">Talking</option><option value="making eye contact">Eye contact</option><option value="holding hands">Holding hands</option><option value="friendly hug">Friendly hug</option><option value="cuddling">Cuddling</option><option value="dancing together">Dancing together</option><option value="sharing food">Sharing food</option><option value="playful teasing">Playful teasing</option><option value="arguing">Arguing</option><option value="fighting each other">Fighting</option><option value="posing together for a photo">Photo pose</option><option value="kissing, consenting adults">Kissing — adults</option><option value="romantic embrace, consenting adults">Romantic embrace — adults</option><option value="suggestive posing together, consenting adults">Suggestive pose — adults</option><option value="intimate touching, consenting adults">Intimate touching — adults</option><option value="making out, consenting adults">Making out — adults</option><option value="explicit sexual interaction, consenting adults">Explicit interaction — adults</option></select>
+        </label>
+        <label class="toggle-field">
+          <input id="nsfwMode" type="checkbox">
+          <span><strong>NSFW mode</strong><small>Steer questions and prompts toward adult erotic content</small></span>
+        </label>
+      </div>
+      <section id="h3Panel" class="h3-panel" hidden>
+        <div class="h3-panel-head">
+          <div><span class="eyebrow">MINIMAX H3 DIRECTOR</span><h2>Build the video timeline</h2></div>
+          <button id="addScene" class="secondary-action" type="button">+ Add scene</button>
+        </div>
+        <div class="h3-mode-controls">
+          <label>Generation mode
+            <select id="h3Mode"><option value="t2v">T2V — Text to video</option><option value="i2v">I2V — Animate first frame</option></select>
+          </label>
+          <label>Duration
+            <select id="h3Duration"><option value="4">4 seconds</option><option value="5">5 seconds</option><option value="6" selected>6 seconds</option><option value="8">8 seconds</option><option value="10">10 seconds</option><option value="12">12 seconds</option><option value="15">15 seconds</option></select>
+          </label>
+          <label>Vision model
+            <input id="visionModel" value="huihui_ai/qwen3-vl-abliterated:8b-instruct-q4_K_M" aria-label="Ollama vision model">
+          </label>
+          <label>Prompt format
+            <select id="h3Format"><option value="template" selected>Readable timeline template</option><option value="native">Native H3 fields</option></select>
+          </label>
+        </div>
+        <div id="i2vPanel" class="i2v-panel" hidden>
+          <label class="image-drop" for="referenceImage">
+            <input id="referenceImage" type="file" accept="image/png,image/jpeg,image/webp">
+            <span><strong>Upload the first frame</strong><small>PNG, JPEG, or WebP · analyzed only by local Ollama</small></span>
+          </label>
+          <div id="imageWorkspace" class="image-workspace" hidden>
+            <img id="imagePreview" alt="I2V first-frame preview">
+            <div class="image-analysis-copy">
+              <div class="output-label"><span>LOCAL IMAGE ANALYSIS</span><span id="imageAnalysisStatus">Waiting</span></div>
+              <p id="imageAnalysisSummary"></p>
+              <div id="imageQuestions" class="image-questions"></div>
+            </div>
+          </div>
+        </div>
+        <div id="scenes" class="scenes"></div>
+        <div class="h3-production-fields">
+          <label>Exact dialogue / voice
+            <textarea id="h3Dialogue" rows="2" placeholder='Speaker, language, voice and exact words — e.g. Woman, English, soft voice: "We made it."'></textarea>
+          </label>
+          <label>Exact on-screen text
+            <textarea id="h3OnscreenText" rows="2" placeholder='One item per line — e.g. COMFYUI; DIRECTED BY COMFYUI'></textarea>
+          </label>
+          <label>Physical soundscape
+            <textarea id="h3Soundscape" rows="2" placeholder="Ambient and action sounds the people in the scene can hear"></textarea>
+          </label>
+          <label>Audience-only music
+            <textarea id="h3Music" rows="2" placeholder="Instruments, tempo, rhythm and timed changes — or N/A"></textarea>
+          </label>
+          <label class="h3-extra">Extra H3 instructions
+            <textarea id="h3Extra" rows="2" placeholder="Continuity locks, exclusions, transition rules, exact repetitions, or other constraints"></textarea>
+          </label>
+        </div>
+        <p class="h3-note">H3 supports 4–15 seconds. Later scenes use official cut timestamps; I2V anchors Picture 1 to 0.00 seconds.</p>
+      </section>
+      <div id="interview" class="interview" hidden>
+        <div class="interview-head">
+          <div><span class="eyebrow">LOCAL AI INTERVIEW</span><h2>Fill in the picture</h2></div>
+          <span id="answerCount" class="answer-count">0 answered</span>
+        </div>
+        <p class="interview-intro">Answer what matters. After a refinement, click <strong>Enough — generate prompt</strong> to apply the changes to the output.</p>
+        <div id="questions" class="questions"></div>
+        <div class="interview-actions">
+          <button id="askMore" class="secondary-action" type="button">Ask next questions</button>
+          <button id="generateNow" class="primary-action" type="button">Enough — generate prompt <span>→</span></button>
+        </div>
+      </div>
+      <div class="composer-actions">
+        <button class="reset-prompt" id="resetPrompt" type="button">Reset prompt</button>
+        <button class="roll" id="roll">Start prompt interview <span>→</span></button>
+      </div>
+      <p id="engineStatus" style="margin:13px 0 0;color:var(--muted);font-size:12px">Local AI uses Ollama through the Visual Studio solution. Questions and prompts stay on this computer.</p>
+      <details id="thinkingPanel" class="thinking-panel" hidden>
+        <summary><span>OLLAMA THINKING</span><small id="thinkingSummary">Show local reasoning</small></summary>
+        <pre id="thinkingText"></pre>
+      </details>
+    </section>
+
+    <section id="result" class="result" hidden>
+      <div class="result-head">
+        <div><p class="eyebrow">YOUR PROMPT</p><h2 id="resultTitle">Ready for your workflow</h2></div>
+        <button class="copy" id="copyAll">Copy prompt</button>
+      </div>
+
+      <div class="panel output-card">
+        <div class="output-label"><span>POSITIVE</span><button id="copyPositive">Copy</button></div>
+        <textarea id="positive" rows="6" spellcheck="false"></textarea>
+      </div>
+      <div class="panel output-card negative-card">
+        <div class="output-label"><span>NEGATIVE</span><button id="copyNegative">Copy</button></div>
+        <textarea id="negative" rows="4" spellcheck="false"></textarea>
+      </div>
+
+      <div id="variantsCard" class="panel variants-card" hidden>
+        <div class="output-label"><span>CAMERA VARIANTS</span><span>Click one to use it</span></div>
+        <div id="variants" class="variants"></div>
+      </div>
+
+      <div class="panel refinement-card">
+        <div class="output-label"><span>REFINE AFTER GENERATING</span><span>Optional</span></div>
+        <p>After trying the prompt in ComfyUI, tell Ollama what worked or what needs changing.</p>
+        <textarea id="refinementFeedback" rows="3" placeholder="Example: The face looks right, but make the hair longer, brighten the room, and use a lower camera angle."></textarea>
+        <p id="refinementStatus" class="refinement-status" aria-live="polite"></p>
+        <div class="refinement-actions">
+          <button id="refineQuestions" class="secondary-action" type="button">Ask more questions</button>
+          <button id="refinePrompt" class="primary-action" type="button">Apply feedback &amp; regenerate <span>→</span></button>
+        </div>
+      </div>
+
+      <div id="tagEditor" class="tag-editor panel">
+        <div class="tag-editor-head"><div><h3>Tag stack</h3><p>Click × to remove. Add exact tags below.</p></div><span id="tagCount"></span></div>
+        <div id="tags" class="tags"></div>
+        <div class="add-row">
+          <input id="newTag" autocomplete="off" placeholder="Add a Danbooru tag…">
+          <button id="addTag">Add tag</button>
+          <div id="suggestions" class="suggestions" hidden></div>
+        </div>
+      </div>
+
+      <details class="panel help">
+        <summary>ComfyUI quick use</summary>
+        <p><strong>Danbooru:</strong> paste positive and negative text into the conditioning text nodes used by your anime checkpoint. <strong>MiniMax H3:</strong> paste the positive prompt into your H3 video workflow's prompt input. <strong>Krea 2:</strong> paste the natural-language prompt into the Krea 2 text-conditioning input. Node names vary between workflows and custom-node packs.</p>
+      </details>
+    </section>
+  </main>
+  <footer>
+    <span>Danbooru · Pony V6 · Krea 2 · MiniMax H3 · Local Ollama generation</span>
+    <a class="paypal-link" href="https://paypal.me/StickyBurrito" target="_blank" rel="noopener noreferrer" aria-label="Support Stickyburrito with PayPal" title="Support with PayPal">P</a>
+  </footer>
+  <script src="app.js"></script>
+</body>
+</html>

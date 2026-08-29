@@ -1,0 +1,19 @@
+# Visual Studio and .NET build output
+.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# Generated installer payload and distributables
+artifacts/
+TagRoll.Setup/Payload/
+
+# Python cache and local tooling
+__pycache__/
+*.py[cod]
+
+# Local logs and OS metadata
+*.log
+Thumbs.db
+.DS_Store

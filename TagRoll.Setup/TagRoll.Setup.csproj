@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Stickyburritos-Prompt-Generator-Setup</AssemblyName>
+    <Product>Stickyburrito's Prompt Generator Setup</Product>
+    <AssemblyTitle>Stickyburrito's Prompt Generator Setup</AssemblyTitle>
+    <Description>Installer for Stickyburrito's Prompt Generator and its local Ollama models</Description>
+    <Version>1.1.0</Version>
+    <ApplicationIcon>..\assets\stickyburrito-app-icon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Payload\TagRollPayload.zip" LogicalName="TagRollPayload.zip" />
+    <EmbeddedResource Include="..\assets\stickyburrito-app-icon.png" LogicalName="StickyburritoIcon.png" />
+  </ItemGroup>
+</Project>

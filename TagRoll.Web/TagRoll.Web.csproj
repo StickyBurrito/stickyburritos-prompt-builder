@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>TagRoll.Web</RootNamespace>
+    <AssemblyName>Stickyburritos-Prompt-Generator</AssemblyName>
+    <Product>Stickyburrito's Prompt Generator</Product>
+    <AssemblyTitle>Stickyburrito's Prompt Generator</AssemblyTitle>
+    <Description>Local AI prompt generator for ComfyUI</Description>
+    <Version>1.1.0</Version>
+    <ApplicationIcon>..\assets\stickyburrito-app-icon.ico</ApplicationIcon>
+  </PropertyGroup>
+</Project>

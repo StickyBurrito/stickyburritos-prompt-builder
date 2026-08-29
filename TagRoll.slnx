@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="TagRoll.Web/TagRoll.Web.csproj" />
+  <Project Path="TagRoll.Setup/TagRoll.Setup.csproj" />
+</Solution>
