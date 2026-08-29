@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/StickyBurrito/stickyburritos-prompt-builder/releases/latest/download/Stickyburritos-Prompt-Generator-Setup.exe"><img src="https://img.shields.io/badge/Download-Windows_installer-ff299d?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows installer"></a>
-  <a href="https://github.com/StickyBurrito/stickyburritos-prompt-builder/releases/latest"><img src="https://img.shields.io/badge/Release-v1.1.1-00cfff?style=for-the-badge&logo=github&logoColor=white" alt="Latest release: v1.1.1"></a>
+  <a href="https://github.com/StickyBurrito/stickyburritos-prompt-builder/releases/latest"><img src="https://img.shields.io/badge/Release-v1.1.2-00cfff?style=for-the-badge&logo=github&logoColor=white" alt="Latest release: v1.1.2"></a>
   <a href="https://paypal.me/StickyBurrito"><img src="https://img.shields.io/badge/Support_with-PayPal-0070E0?style=for-the-badge&logo=paypal&logoColor=white" alt="Support with PayPal"></a>
 </p>
 
@@ -30,7 +30,7 @@ The installer handles the whole local stack. It can install or update Ollama, do
 
 - **Local prompt interviews** — Ollama asks five focused questions at a time and can continue toward 100 distinct details. Skipped questions stay skipped.
 - **Danbooru and Pony V6 XL** — Generates ordered booru tags, Pony score/source/rating tags, negative prompts, and camera variants for ComfyUI.
-- **Krea 2** — Produces cohesive natural-language image prompts with photorealism as the default instead of checkpoint-specific tags.
+- **Krea 2** — Produces faithful, cohesive natural-language prompts based on the [official Krea 2 prompting guidance](https://github.com/krea-ai/krea-2/blob/main/docs/prompting.md), with photorealism as the default when no other medium is selected.
 - **MiniMax H3 T2V** — Builds production-style video prompts with timed scenes, camera movement, character movement, emotion, transitions, dialogue, sound, and music.
 - **MiniMax H3 I2V** — Upload a first frame, analyze it locally with a vision model, and create motion that begins from the actual image composition.
 - **Cumulative refinement** — Tell the generator what worked or what should change. Earlier refinements remain part of later regenerations.

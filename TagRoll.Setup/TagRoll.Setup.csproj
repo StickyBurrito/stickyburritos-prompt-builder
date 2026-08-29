@@ -9,7 +9,7 @@
     <Product>Stickyburrito's Prompt Generator Setup</Product>
     <AssemblyTitle>Stickyburrito's Prompt Generator Setup</AssemblyTitle>
     <Description>Installer for Stickyburrito's Prompt Generator and its local Ollama models</Description>
-    <Version>1.1.1</Version>
+    <Version>1.1.2</Version>
     <ApplicationIcon>..\assets\stickyburrito-app-icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>

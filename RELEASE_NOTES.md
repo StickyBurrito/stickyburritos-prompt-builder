@@ -1,6 +1,6 @@
-# Stickyburrito's Prompt Generator v1.1.1
+# Stickyburrito's Prompt Generator v1.1.2
 
-Still-image interview correction for the local ComfyUI prompt companion.
+Krea 2 prompt-expansion alignment and still-image interview correction for the local ComfyUI prompt companion.
 
 ## Included
 
@@ -21,6 +21,12 @@ Still-image interview correction for the local ComfyUI prompt companion.
 - No audio, camera-movement, timeline, duration, or transition questions in image modes
 - Video-only questions are rejected and replaced in the interface if a local model ignores the still-image instruction
 - Switching between MiniMax video and image workflows clears incompatible interview state
+- Krea prompts follow the official natural-language expansion structure
+- Original subjects, actions, colors, content details, and spatial relationships are preserved
+- Unrequested props, characters, clothing, materials, and story elements are no longer invented
+- Explicit media and style locks remain mandatory throughout every Krea variant
+- Requested visible text is preserved verbatim inside quotation marks
+- Already-detailed Krea briefs are polished instead of unnecessarily inflated
 
 ## Installation
 

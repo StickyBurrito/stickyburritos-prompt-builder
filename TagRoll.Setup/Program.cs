@@ -16,7 +16,7 @@ internal static class Program
     private const string AppProductName = "Stickyburrito's Prompt Generator";
     private const string AppExecutableName = "Stickyburritos-Prompt-Generator.exe";
     private const string UninstallRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\StickyburritosPromptGenerator";
-    private const string AppProductVersion = "1.1.1";
+    private const string AppProductVersion = "1.1.2";
 
     private static readonly ModelTier[] Tiers =
     [
