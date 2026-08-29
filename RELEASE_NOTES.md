@@ -1,6 +1,6 @@
-# Stickyburrito's Prompt Generator v1.1.0
+# Stickyburrito's Prompt Generator v1.1.1
 
-Windows feature and reliability update for the local ComfyUI prompt companion.
+Still-image interview correction for the local ComfyUI prompt companion.
 
 ## Included
 
@@ -17,6 +17,10 @@ Windows feature and reliability update for the local ComfyUI prompt companion.
 - Uninstall preserves Ollama and its downloaded model cache
 - Stable 32 GB model recommendation that avoids the malformed Q8 artifact
 - Selectable installation directory and cancellable setup
+- Dedicated still-image interview direction for Krea 2, Danbooru, and Pony
+- No audio, camera-movement, timeline, duration, or transition questions in image modes
+- Video-only questions are rejected and replaced in the interface if a local model ignores the still-image instruction
+- Switching between MiniMax video and image workflows clears incompatible interview state
 
 ## Installation
 

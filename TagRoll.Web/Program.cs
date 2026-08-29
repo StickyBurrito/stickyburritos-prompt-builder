@@ -95,7 +95,22 @@ pose_and_contact must explain the body's orientation, weight distribution, limb 
 When adult nudity or sexualized anatomy is plainly visible, name it directly without euphemism, coyness, moral commentary, or omission. Do not turn breasts into clothing or reduce the dominant subject to generic wording. Never identify a real person, guess a name, or infer an age. Also describe composition, environment, lighting, visual style, and plausible forward motion. Ask up to four short questions only where desired motion, camera path, sound, dialogue, or ambiguous behavior cannot be inferred. The summary must foreground the dominant subject and body details before the room. Output only schema-valid JSON.
 """;
 const string StandardNegative = "worst quality, low quality, normal quality, lowres, blurry, out of focus, jpeg artifacts, bad anatomy, bad proportions, bad hands, malformed hands, extra digits, fewer digits, missing fingers, extra limbs, missing limbs, fused limbs, deformed, disfigured, duplicate, cropped, text, watermark, signature, username";
-const string InterviewSystem = """You are the visual director for a highly detailed local image and video prompt builder. This is a deep interview with a minimum target of 100 distinct questions across multiple batches. Examine the current brief, prior answers, used IDs, and questions already shown, then return exactly five concise questions about useful information that has not been covered. Explore fine-grained distinctions instead of stopping after broad topics: identity and count; individual face, hair, skin, anatomy and proportions; every garment and material; precise pose, hand and foot placement; action beats and interactions; gaze and expression; foreground, midground and background; architecture and props; time, weather, lighting sources and color; palette and texture; framing, lens, focus, camera height and motion; continuity; dialogue, sound and music; scene-by-scene timing; desired exclusions and failure prevention. A later question may revisit a broad category only when it asks for a genuinely different detail. Never paraphrase a prior question. Never repeat a used ID; create specific IDs such as subject_1_hair_texture or shot_2_camera_height. A blank answer means deliberately skipped, so do not ask it again. Give 3-5 compact suggestions per question and allow custom answers. Return only schema-valid JSON.""";
+const string StillImageInterviewSystem = """
+You are the still-image art director for Krea 2, Danbooru, and Pony image generation. This interview defines one frozen image, never a video. It is a deep interview with a minimum target of 100 distinct questions across multiple batches. Examine the current brief, prior answers, used IDs, and questions already shown, then return exactly five concise questions about useful still-image information that has not been covered.
+
+Explore fine-grained visual distinctions: subject identity and count; individual face, hair, skin, anatomy and proportions; every garment and material; the single captured pose, hand and foot placement, interaction, gaze and expression; foreground, midground and background; architecture and props; time of day, weather, lighting sources and color; palette and surface texture; composition, crop, viewpoint, camera height, lens, perspective, focus and depth of field; rendered text; desired exclusions and failure prevention. Camera questions may describe only the static photographic setup or viewpoint.
+
+Never ask about audio, sound, music, dialogue, voices, camera movement, camera paths, character movement over time, animation, timelines, time slots, duration, pacing, transitions, cuts, later scenes, shot sequences, or continuity between moments. Do not ask how anything changes during the image. A visible action may be phrased only as the exact pose or instant frozen in the frame.
+
+A later question may revisit a broad category only when it asks for a genuinely different detail. Never paraphrase a prior question. Never repeat a used ID; create specific IDs such as subject_1_hair_texture, foreground_props, or camera_height. A blank answer means deliberately skipped, so do not ask it again. Give 3-5 compact suggestions per question and allow custom answers. Return only schema-valid JSON.
+""";
+const string VideoInterviewSystem = """
+You are the audiovisual director for MiniMax H3 video generation. This is a deep interview with a minimum target of 100 distinct questions across multiple batches. Examine the current brief, prior answers, used IDs, and questions already shown, then return exactly five concise questions about useful information that has not been covered.
+
+Explore identity and count; appearance, wardrobe and materials; initial pose and spatial layout; chronological character action and emotional performance; foreground, background, architecture and props; lighting, weather, palette and texture; framing, lens, focus, camera height and camera movement; scene timing, cuts, transitions and continuity; dialogue, ambience, sound effects and music; rendered text; exclusions and failure prevention.
+
+A later question may revisit a broad category only when it asks for a genuinely different detail. Never paraphrase a prior question. Never repeat a used ID; create specific IDs such as subject_1_hair_texture or shot_2_camera_height. A blank answer means deliberately skipped, so do not ask it again. Give 3-5 compact suggestions per question and allow custom answers. Return only schema-valid JSON.
+""";
 const string ExamplesSystem = """You create surprising, useful visual prompt starters for a local prompt generator. Return exactly three substantially different ideas. Each must be one concise sentence of 8-20 words with a clear subject, action, and setting. Avoid generic quality buzzwords. For MiniMax H3, make each idea contain visible motion suitable for video. For Krea 2, favor art direction and concrete visual design. For Danbooru or Pony, write natural-language scene ideas that can be translated into tags. Keep all three fresh and unrelated. Output only schema-valid JSON.""";
 
 var builder = WebApplication.CreateBuilder(args);
@@ -142,6 +157,14 @@ app.MapPost("/api/examples", async (ExamplesRequest request, IHttpClientFactory 
 app.MapPost("/api/interview", async (InterviewRequest request, IHttpClientFactory clients, IConfiguration config) =>
 {
     var model = string.IsNullOrWhiteSpace(request.Model) ? config["Ollama:DefaultModel"]! : request.Model;
+    var target = (request.Target ?? "danbooru").Trim().ToLowerInvariant();
+    var isVideo = target == "minimax_h3";
+    var workflow = target switch
+    {
+        "minimax_h3" => "MiniMax H3 audiovisual video",
+        "krea2" => "Krea 2 single still image",
+        _ => "Danbooru or Pony single still image"
+    };
     var history = request.Answers is { Count: > 0 }
         ? string.Join("\n", request.Answers.Select(x => $"- {x.Question}: {x.Answer}"))
         : "None yet.";
@@ -149,10 +172,14 @@ app.MapPost("/api/interview", async (InterviewRequest request, IHttpClientFactor
     var usedIds = request.AskedQuestionIds is { Count: > 0 } ? string.Join(", ", request.AskedQuestionIds) : "None yet.";
     var direction = request.NsfwMode ? "NSFW mode is enabled. When relevant, ask directly about adult erotic styling, nudity, anatomy, intimacy, or explicit action." : "NSFW mode is disabled.";
     var explored = request.AskedQuestions?.Distinct(StringComparer.OrdinalIgnoreCase).Count() ?? 0;
-    var user = $"Original idea: {request.Idea}\nPrompt dialect: {request.Target ?? "danbooru"}\nCheckpoint profile: {request.CheckpointProfile ?? "generic"}\nContent direction: {direction}\nINTERVIEW PROGRESS: {explored}/100 questions already explored. Continue until at least 100. Return exactly 5 new questions now.\nANSWERS PROVIDED:\n{history}\nUSED QUESTION IDS — NEVER REUSE THESE IDS:\n{usedIds}\nQUESTIONS ALREADY SHOWN — DO NOT ASK THESE AGAIN OR PARAPHRASE THEM:\n{alreadyShown}";
+    var modeRule = isVideo
+        ? "VIDEO MODE: temporal action, camera movement, scene timing, and audio questions are allowed."
+        : "STILL IMAGE MODE: ask only about visual information present in one frozen frame. Audio and every form of movement, animation, timeline, duration, transition, or multi-scene question are forbidden.";
+    var user = $"Original idea: {request.Idea}\nTarget workflow: {workflow}\nPrompt dialect: {target}\n{modeRule}\nCheckpoint profile: {request.CheckpointProfile ?? "generic"}\nContent direction: {direction}\nINTERVIEW PROGRESS: {explored}/100 questions already explored. Continue until at least 100. Return exactly 5 new questions now.\nANSWERS PROVIDED:\n{history}\nUSED QUESTION IDS — NEVER REUSE THESE IDS:\n{usedIds}\nQUESTIONS ALREADY SHOWN — DO NOT ASK THESE AGAIN OR PARAPHRASE THEM:\n{alreadyShown}";
     try
     {
-        var result = await AskOllama(clients.CreateClient("ollama"), config["Ollama:Endpoint"]!, model, Schemas.Interview, InterviewSystem, user, requestId: request.RequestId, enableThinking: request.ShowThinking);
+        var interviewSystem = isVideo ? VideoInterviewSystem : StillImageInterviewSystem;
+        var result = await AskOllama(clients.CreateClient("ollama"), config["Ollama:Endpoint"]!, model, Schemas.Interview, interviewSystem, user, requestId: request.RequestId, enableThinking: request.ShowThinking);
         result["model"] = model;
         return Results.Json(result);
     }

@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/StickyBurrito/stickyburritos-prompt-builder/releases/latest/download/Stickyburritos-Prompt-Generator-Setup.exe"><img src="https://img.shields.io/badge/Download-Windows_installer-ff299d?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows installer"></a>
-  <a href="https://github.com/StickyBurrito/stickyburritos-prompt-builder/releases/latest"><img src="https://img.shields.io/badge/Release-v1.1.0-00cfff?style=for-the-badge&logo=github&logoColor=white" alt="Latest release: v1.1.0"></a>
+  <a href="https://github.com/StickyBurrito/stickyburritos-prompt-builder/releases/latest"><img src="https://img.shields.io/badge/Release-v1.1.1-00cfff?style=for-the-badge&logo=github&logoColor=white" alt="Latest release: v1.1.1"></a>
   <a href="https://paypal.me/StickyBurrito"><img src="https://img.shields.io/badge/Support_with-PayPal-0070E0?style=for-the-badge&logo=paypal&logoColor=white" alt="Support with PayPal"></a>
 </p>
 

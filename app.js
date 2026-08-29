@@ -3,7 +3,7 @@
 
   const $ = (id) => document.getElementById(id);
   const interviewQuestionTarget = 100;
-  const state = { tags: [], interviewAnswers: [], interviewAsked: [], interviewAskedIds: [], refinementHistory: [], autoRegenerateTimer: null, examplesController: null, imageAnalysis: null, imageObjectUrl: null };
+  const state = { tags: [], interviewAnswers: [], interviewAsked: [], interviewAskedIds: [], interviewTarget: null, refinementHistory: [], autoRegenerateTimer: null, examplesController: null, imageAnalysis: null, imageObjectUrl: null };
 
   function showOllamaThinking(thinking, context = "request") {
     const panel = $("thinkingPanel");
@@ -281,6 +281,48 @@
     const overlap=[...left].filter(word => right.has(word)).length;
     return overlap / Math.min(left.size, right.size) >= (sharesTopic ? .45 : .7);
   }
+  const stillImageFallbackQuestions = [
+    { id:"still_subject_count", label:"Subjects", question:"How many subjects must appear in the finished image?", suggestions:["one subject", "two subjects", "small group", "crowded scene"] },
+    { id:"still_face_structure", label:"Face", question:"What facial structure and distinguishing features should the main subject have?", suggestions:["soft rounded features", "sharp angular features", "strong cheekbones", "distinctive freckles"] },
+    { id:"still_hair_design", label:"Hair", question:"What exact hairstyle, length, texture, and color should be visible?", suggestions:["long straight hair", "short textured crop", "loose curls", "intricate braided style"] },
+    { id:"still_body_proportions", label:"Proportions", question:"What build and body proportions should define the main subject?", suggestions:["slender and elongated", "athletic and defined", "soft and curvy", "broad and powerful"] },
+    { id:"still_wardrobe_silhouette", label:"Wardrobe", question:"What clothing silhouette should shape the subject in the frame?", suggestions:["close fitted", "oversized and relaxed", "structured tailoring", "flowing layered fabric"] },
+    { id:"still_material_detail", label:"Materials", question:"Which visible materials and surface finishes matter most?", suggestions:["matte cotton", "glossy leather", "heavy velvet", "reflective metal"] },
+    { id:"still_pose", label:"Captured pose", question:"What exact pose should be frozen in the image?", suggestions:["relaxed seated pose", "confident standing pose", "reclining pose", "mid-gesture pose"] },
+    { id:"still_hands", label:"Hands", question:"Where should the subject's hands be placed in the captured pose?", suggestions:["resting naturally", "holding a prop", "touching their clothing", "one hand near the face"] },
+    { id:"still_expression", label:"Expression", question:"What facial expression and gaze should the image capture?", suggestions:["direct confident gaze", "soft private smile", "distant contemplative look", "playful side glance"] },
+    { id:"still_environment", label:"Environment", question:"What exact location surrounds the subject in this single frame?", suggestions:["detailed interior", "urban exterior", "natural landscape", "minimal studio set"] },
+    { id:"still_foreground", label:"Foreground", question:"What should occupy the foreground to add depth or context?", suggestions:["soft out-of-focus objects", "architectural framing", "scattered personal props", "clear unobstructed view"] },
+    { id:"still_background", label:"Background", question:"What important background elements must remain clearly recognizable?", suggestions:["furnished room", "city skyline", "dramatic landscape", "abstract graphic backdrop"] },
+    { id:"still_composition", label:"Composition", question:"How should the subjects and major objects be arranged inside the frame?", suggestions:["centered symmetry", "rule-of-thirds balance", "strong diagonal layout", "layered asymmetry"] },
+    { id:"still_crop", label:"Framing", question:"How tightly should the final image be framed?", suggestions:["extreme close-up", "waist-up portrait", "full-body view", "wide environmental view"] },
+    { id:"still_viewpoint", label:"Viewpoint", question:"From what static camera height and angle should the image be seen?", suggestions:["eye level", "low angle", "high angle", "overhead view"] },
+    { id:"still_lens", label:"Lens", question:"What lens perspective should shape the still image?", suggestions:["natural 50mm perspective", "compressed telephoto look", "wide-angle perspective", "macro close detail"] },
+    { id:"still_focus", label:"Focus", question:"How should sharpness and depth of field be distributed?", suggestions:["everything sharp", "subject sharp with soft background", "very shallow focus", "foreground and subject sharp"] },
+    { id:"still_lighting_source", label:"Lighting", question:"Which visible light sources should define the image?", suggestions:["soft window light", "hard direct sunlight", "practical lamps", "colored studio lights"] },
+    { id:"still_shadow_style", label:"Shadows", question:"How strong and directional should the shadows appear?", suggestions:["soft low-contrast shadows", "hard graphic shadows", "dramatic side lighting", "even shadowless light"] },
+    { id:"still_palette", label:"Palette", question:"What exact color palette should dominate the frame?", suggestions:["warm earth tones", "cool blue-green tones", "high-contrast primaries", "muted monochrome"] },
+    { id:"still_atmosphere", label:"Atmosphere", question:"What weather, haze, or environmental condition should be visibly present?", suggestions:["clear dry air", "rain and wet surfaces", "soft mist", "dusty golden haze"] },
+    { id:"still_text", label:"Visible text", question:"Should any legible words or lettering appear inside the image?", suggestions:["no visible text", "one exact title", "small environmental signage", "graphic poster lettering"] },
+    { id:"still_exclusions", label:"Avoid", question:"Which visual mistakes or unwanted elements should the image explicitly avoid?", suggestions:["cluttered background", "distorted anatomy", "unwanted text", "painterly brushstrokes"] }
+  ];
+  function isVideoOnlyQuestion(item) {
+    const text = normalizeQuestion(`${item.id || ""} ${item.label || ""} ${item.question || ""}`);
+    return /\b(?:audio|sound|soundscape|music|dialogue|voice|voiceover|movement|motion|animate|animation|timeline|duration|pacing|transition|transitions|dissolve|fps|timecode)\b/.test(text)
+      || /\bcamera (?:move|moves|movement|motion|path|tracking|orbit|pan|tilt|dolly|crane)\b/.test(text)
+      || /\b(?:next|later|subsequent) (?:scene|shot|moment|frame)\b/.test(text)
+      || /\b(?:between|across) (?:scenes|shots|moments|frames)\b/.test(text);
+  }
+  function fillStillImageQuestionBatch(fresh, seen, seenIds) {
+    if ($("target").value === "minimax_h3") return;
+    for (const item of stillImageFallbackQuestions) {
+      if (fresh.length >= 5) break;
+      const question = item.question;
+      const id = item.id.toLowerCase();
+      const duplicate = seenIds.has(id) || seen.has(normalizeQuestion(question)) || state.interviewAsked.some(previous => questionsSimilar(previous, question)) || fresh.some(previous => questionsSimilar(previous.question || previous.label || "", question));
+      if (!duplicate) { fresh.push(item); seen.add(normalizeQuestion(question)); seenIds.add(id); }
+    }
+  }
   function unique(items) { return [...new Set(items.map(normalizeTag).filter(Boolean))]; }
 
   function parseIdea(text) {
@@ -344,25 +386,30 @@
     const idea = buildPromptIdea();
     if (!idea) { $("engineStatus").textContent = "Add an overall idea, describe at least one H3 scene, or upload a first frame."; $("idea").focus(); return; }
     if ($("engine").value !== "ollama") { await generatePrompt(); return; }
-    if (reset) { state.interviewAnswers = []; state.interviewAsked = []; state.interviewAskedIds = []; } else collectInterviewAnswers();
+    const target = $("target").value;
+    const switchedBetweenImageAndVideo = state.interviewTarget && (state.interviewTarget === "minimax_h3") !== (target === "minimax_h3");
+    if (reset || switchedBetweenImageAndVideo) { state.interviewAnswers = []; state.interviewAsked = []; state.interviewAskedIds = []; } else collectInterviewAnswers();
+    state.interviewTarget = target;
     $("interview").hidden = false; $("roll").hidden = true;
     $("questions").innerHTML = '<p class="interview-intro">Ollama is looking for useful missing details…</p>';
     $("engineStatus").textContent = "Ollama is preparing the next questions locally…";
     $("askMore").disabled = true; $("generateNow").disabled = true;
     const liveThinking = $("showThinking").checked ? beginLiveThinking("the interview batch") : { requestId:null, stop:()=>{} };
     try {
-      const response = await fetch("/api/interview", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ idea, model:$("model").value.trim(), target:$("target").value, checkpointProfile:$("checkpointProfile").value, answers:state.interviewAnswers, askedQuestions:state.interviewAsked, askedQuestionIds:state.interviewAskedIds, nsfwMode:$("nsfwMode").checked, requestId:liveThinking.requestId, showThinking:$("showThinking").checked }) });
+      const response = await fetch("/api/interview", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ idea, model:$("model").value.trim(), target, checkpointProfile:$("checkpointProfile").value, answers:state.interviewAnswers, askedQuestions:state.interviewAsked, askedQuestionIds:state.interviewAskedIds, nsfwMode:$("nsfwMode").checked, requestId:liveThinking.requestId, showThinking:$("showThinking").checked }) });
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Interview request failed");
       if ($("showThinking").checked) showOllamaThinking(data.ollama_thinking, "the interview batch");
       const seen = new Set(state.interviewAsked.map(normalizeQuestion));
       const seenIds = new Set(state.interviewAskedIds);
       const fresh = [];
-      (data.questions || []).forEach(item => {
+      const rejectedVideoQuestions = target === "minimax_h3" ? 0 : (data.questions || []).filter(isVideoOnlyQuestion).length;
+      (data.questions || []).filter(item => target === "minimax_h3" || !isVideoOnlyQuestion(item)).forEach(item => {
         const question = item.question || item.label || "";
         const id = String(item.id || "").trim().toLowerCase();
         const duplicate = !question || seen.has(normalizeQuestion(question)) || state.interviewAsked.some(previous => questionsSimilar(previous, question)) || fresh.some(previous => questionsSimilar(previous.question || previous.label || "", question));
         if (!duplicate) { fresh.push(item); seen.add(normalizeQuestion(question)); if (id) seenIds.add(id); }
       });
+      fillStillImageQuestionBatch(fresh, seen, seenIds);
       const totalExplored = new Set([...state.interviewAsked, ...fresh.map(item => item.question || item.label || "")].map(normalizeQuestion)).size;
       if (fresh.length) {
         renderQuestions(fresh);
@@ -379,7 +426,9 @@
       const answeredShown = new Set(state.interviewAnswers.filter(answer => answer.id !== "post-generation-feedback").map(answer => answer.id)).size;
       const uniqueAsked = new Set(state.interviewAsked.map(normalizeQuestion)).size;
       $("answerCount").textContent = `${answeredShown} answered · ${uniqueAsked}/${interviewQuestionTarget} questions explored`;
-      $("engineStatus").textContent = `Questions generated locally with ${data.model || $("model").value}.`;
+      $("engineStatus").textContent = rejectedVideoQuestions
+        ? `Questions generated locally with ${data.model || $("model").value}. ${rejectedVideoQuestions} video-only question${rejectedVideoQuestions === 1 ? " was" : "s were"} replaced for this still-image workflow.`
+        : `Questions generated locally with ${data.model || $("model").value}.`;
     } catch (error) {
       $("questions").innerHTML = `<p class="interview-intro">Could not ask questions: ${String(error.message).replace(/</g,"&lt;")}. You can still generate now.</p>`;
     } finally { liveThinking.stop(); $("askMore").disabled = false; $("generateNow").disabled = false; }
@@ -548,7 +597,7 @@
   function syncH3Mode() { $("i2vPanel").hidden = $("target").value !== "minimax_h3" || $("h3Mode").value !== "i2v"; }
 
   function resetPrompt() {
-    state.tags = []; state.interviewAnswers = []; state.interviewAsked = []; state.interviewAskedIds = []; state.refinementHistory = []; state.outputFormat = "danbooru";
+    state.tags = []; state.interviewAnswers = []; state.interviewAsked = []; state.interviewAskedIds = []; state.interviewTarget = null; state.refinementHistory = []; state.outputFormat = "danbooru";
     $("idea").value = "";
     ["camera", "location", "angle", "pose", "actors", "interaction"].forEach(id => $(id).value = "auto");
     $("style").value = $("target").value === "krea2" ? "photo" : "anime"; $("framing").value = "auto"; $("quality").value = "high";
@@ -689,6 +738,16 @@
   $("refinePrompt").addEventListener("click", refinePrompt);
   $("refineQuestions").addEventListener("click", refineWithQuestions);
   $("target").addEventListener("change", () => {
+    const target = $("target").value;
+    const switchedBetweenImageAndVideo = state.interviewTarget && (state.interviewTarget === "minimax_h3") !== (target === "minimax_h3");
+    if (switchedBetweenImageAndVideo) {
+      state.interviewAnswers = []; state.interviewAsked = []; state.interviewAskedIds = [];
+      $("questions").replaceChildren(); $("answerCount").textContent = "0 answered";
+      $("interview").hidden = true; $("roll").hidden = false;
+      $("roll").firstChild.textContent = "Start prompt interview ";
+      $("engineStatus").textContent = "Interview reset for the newly selected image or video workflow.";
+    }
+    state.interviewTarget = target;
     syncTargetControls();
     if ($("result").hidden) loadExamples();
   });
