@@ -1,6 +1,6 @@
-# Stickyburrito's Prompt Generator v1.1.2
+# Stickyburrito's Prompt Generator v1.2.0
 
-Krea 2 prompt-expansion alignment and still-image interview correction for the local ComfyUI prompt companion.
+Local Krea output review and generation-learning update for the ComfyUI prompt companion.
 
 ## Included
 
@@ -9,6 +9,11 @@ Krea 2 prompt-expansion alignment and still-image interview correction for the l
 - Krea 2 photorealistic prompt mode
 - MiniMax H3 T2V and I2V timeline prompting
 - Local Qwen vision analysis for uploaded I2V first frames
+- Local Qwen vision review for images generated with a Krea prompt
+- Krea prompt-fidelity score with matched, missed, and guide-alignment details
+- One-click transfer of evaluation corrections into cumulative refinement
+- Optional local generation memory that carries useful Krea lessons into future prompts
+- Clear-memory control; result images are analyzed transiently and never stored
 - Cumulative post-generation refinement
 - VRAM-aware Windows installer
 - Automatic Ollama and model setup

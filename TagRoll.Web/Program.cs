@@ -102,6 +102,13 @@ pose_and_contact must explain the body's orientation, weight distribution, limb 
 
 When adult nudity or sexualized anatomy is plainly visible, name it directly without euphemism, coyness, moral commentary, or omission. Do not turn breasts into clothing or reduce the dominant subject to generic wording. Never identify a real person, guess a name, or infer an age. Also describe composition, environment, lighting, visual style, and plausible forward motion. Ask up to four short questions only where desired motion, camera path, sound, dialogue, or ambiguous behavior cannot be inferred. The summary must foreground the dominant subject and body details before the room. Output only schema-valid JSON.
 """;
+const string KreaEvaluationSystem = """
+You are a strict local quality-control reviewer for images generated from Krea 2 prompts. Compare only visible image evidence against the exact supplied prompt. The Krea guide values faithfulness: preserve the requested subjects and count, identity and appearance, pose or frozen action, colors, spatial relationships, medium and style, composition and viewpoint, lighting, materials, text, and other concrete details without inventing unsupported content.
+
+Give an integer fidelity_score from 0 to 100. matches lists prompt requirements visibly satisfied. misses lists requested details that are absent, contradicted, materially changed, or too ambiguous to verify. guide_alignment lists short observations about faithfulness, subject grouping, medium/style lock, composition, exact rendered text, and unsupported additions; discuss only categories relevant to this prompt. Never claim to see hidden or cropped details. Never identify a real person. Treat adult imagery literally and without moral commentary when NSFW mode is enabled.
+
+refinement_feedback must be a compact, ready-to-paste correction for the next generation. Preserve what matched, correct only the misses, restate fragile spatial or style requirements explicitly, and do not introduce a new creative direction. summary must give the overall verdict in one or two sentences. Output only schema-valid JSON.
+""";
 const string StandardNegative = "worst quality, low quality, normal quality, lowres, blurry, out of focus, jpeg artifacts, bad anatomy, bad proportions, bad hands, malformed hands, extra digits, fewer digits, missing fingers, extra limbs, missing limbs, fused limbs, deformed, disfigured, duplicate, cropped, text, watermark, signature, username";
 const string StillImageInterviewSystem = """
 You are the still-image art director for Krea 2, Danbooru, and Pony image generation. This interview defines one frozen image, never a video. It is a deep interview with a minimum target of 100 distinct questions across multiple batches. Examine the current brief, prior answers, used IDs, and questions already shown, then return exactly five concise questions about useful still-image information that has not been covered.
@@ -231,6 +238,86 @@ app.MapPost("/api/analyze-image", async (ImageAnalysisRequest request, IHttpClie
     catch (Exception ex) { return Results.Json(new { error = ex.Message }, statusCode: 500); }
 });
 
+app.MapGet("/api/generation-memory", () =>
+{
+    var memory = GenerationMemoryStore.Load();
+    return Results.Json(new { enabled = memory.Enabled, count = memory.Entries.Count, path = GenerationMemoryStore.FilePath });
+});
+
+app.MapPost("/api/generation-memory/settings", (GenerationMemorySettingsRequest request) =>
+{
+    var memory = GenerationMemoryStore.Load();
+    memory.Enabled = request.Enabled;
+    GenerationMemoryStore.Save(memory);
+    return Results.Json(new { enabled = memory.Enabled, count = memory.Entries.Count });
+});
+
+app.MapDelete("/api/generation-memory", () =>
+{
+    var memory = GenerationMemoryStore.Load();
+    memory.Entries.Clear();
+    GenerationMemoryStore.Save(memory);
+    return Results.Json(new { enabled = memory.Enabled, count = 0 });
+});
+
+app.MapPost("/api/evaluate-krea-image", async (KreaEvaluationRequest request, IHttpClientFactory clients, IConfiguration config, CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Prompt)) return Results.BadRequest(new { error = "Generate or paste the exact Krea prompt first." });
+    if (string.IsNullOrWhiteSpace(request.ImageBase64)) return Results.BadRequest(new { error = "Choose the image Krea generated first." });
+    var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "image/png", "image/jpeg", "image/webp" };
+    if (!allowed.Contains(request.MimeType ?? "")) return Results.BadRequest(new { error = "Only PNG, JPEG, and WebP images are supported." });
+    if (request.ImageBase64.Length > 16_000_000) return Results.BadRequest(new { error = "The processed image is too large." });
+    var model = string.IsNullOrWhiteSpace(request.VisionModel) ? config["Ollama:VisionModel"] ?? "huihui_ai/qwen3-vl-abliterated:8b-instruct-q4_K_M" : request.VisionModel;
+    try
+    {
+        var body = new JsonObject
+        {
+            ["model"] = model, ["stream"] = false, ["think"] = request.ShowThinking, ["format"] = Schemas.KreaEvaluation.DeepClone(),
+            ["options"] = new JsonObject { ["temperature"] = 0.1, ["num_predict"] = 1800 },
+            ["messages"] = new JsonArray
+            {
+                new JsonObject { ["role"] = "system", ["content"] = KreaEvaluationSystem },
+                new JsonObject
+                {
+                    ["role"] = "user",
+                    ["content"] = $"Compare this generated image against this exact Krea prompt:\n{request.Prompt}\n\nContent mode: {(request.NsfwMode ? "NSFW enabled; use direct literal visual terminology." : "standard.")}",
+                    ["images"] = new JsonArray(request.ImageBase64)
+                }
+            }
+        };
+        using var response = await clients.CreateClient("ollama").PostAsJsonAsync(config["Ollama:Endpoint"]!, body, cancellationToken);
+        var outer = await response.Content.ReadFromJsonAsync<JsonObject>(cancellationToken) ?? throw new InvalidOperationException("Ollama returned no JSON.");
+        if (!response.IsSuccessStatusCode) throw new HttpRequestException(outer["error"]?.GetValue<string>() ?? response.ReasonPhrase);
+        var message = outer["message"];
+        var content = message?["content"]?.GetValue<string>() ?? throw new InvalidOperationException("The vision model returned no evaluation.");
+        var result = JsonNode.Parse(content)?.AsObject() ?? throw new JsonException("The vision model returned invalid JSON.");
+        result["fidelity_score"] = Math.Clamp(result["fidelity_score"]?.GetValue<int>() ?? 0, 0, 100);
+        var thinking = message?["thinking"]?.GetValue<string>();
+        result["ollama_thinking"] = string.IsNullOrWhiteSpace(thinking) ? null : thinking;
+        result["model"] = model;
+
+        var memory = GenerationMemoryStore.Load();
+        if (request.RememberResult && memory.Enabled)
+        {
+            memory.Entries.Add(new GenerationMemoryEntry(
+                DateTimeOffset.UtcNow,
+                request.Prompt.Trim(),
+                result["fidelity_score"]?.GetValue<int>() ?? 0,
+                JsonArrayStrings(result["matches"]),
+                JsonArrayStrings(result["misses"]),
+                result["refinement_feedback"]?.GetValue<string>() ?? ""));
+            if (memory.Entries.Count > 50) memory.Entries.RemoveRange(0, memory.Entries.Count - 50);
+            GenerationMemoryStore.Save(memory);
+        }
+        result["remembered"] = request.RememberResult && memory.Enabled;
+        result["memory_count"] = memory.Entries.Count;
+        return Results.Json(result);
+    }
+    catch (HttpRequestException ex) { return Results.Json(new { error = $"Cannot reach the local vision model: {ex.Message}" }, statusCode: 503); }
+    catch (TaskCanceledException) { return Results.Json(new { error = "Local Krea result evaluation timed out." }, statusCode: 504); }
+    catch (Exception ex) { return Results.Json(new { error = ex.Message }, statusCode: 500); }
+});
+
 app.MapPost("/api/ollama", async (PromptRequest request, IHttpClientFactory clients, IConfiguration config) =>
 {
     var target = request.Target ?? "danbooru";
@@ -251,6 +338,16 @@ app.MapPost("/api/ollama", async (PromptRequest request, IHttpClientFactory clie
                $"Interaction: {request.Interaction ?? "auto"}\n" +
                $"Content direction: {(request.NsfwMode ? "NSFW mode enabled; favor adult erotic, nude, suggestive, or explicit visual details where they fit the request" : "standard mode")}\n" +
                "Treat every value other than auto as an explicit requirement.";
+    if (target == "krea2" && request.UseGenerationMemory)
+    {
+        var memory = GenerationMemoryStore.Load();
+        if (memory.Enabled && memory.Entries.Count > 0)
+        {
+            var lessons = memory.Entries.TakeLast(8).Select((entry, index) =>
+                $"{index + 1}. Prior fidelity {entry.FidelityScore}/100. Preserve successes: {string.Join("; ", entry.Matches.Take(4))}. Prevent prior misses: {string.Join("; ", entry.Misses.Take(5))}. Learned correction: {entry.RefinementFeedback}");
+            user += "\n\nLOCAL KREA GENERATION MEMORY — use these as general reliability lessons only when relevant; never copy unrelated scene content:\n" + string.Join("\n", lessons);
+        }
+    }
     if (target == "minimax_h3")
     {
         var duration = Math.Clamp(request.H3Duration ?? 6, 4, 15);
@@ -299,6 +396,9 @@ if (args.Contains("--open-browser", StringComparer.OrdinalIgnoreCase))
     });
 
 app.Run();
+
+static List<string> JsonArrayStrings(JsonNode? node) =>
+    (node as JsonArray ?? []).Select(item => item?.GetValue<string>() ?? "").Where(value => !string.IsNullOrWhiteSpace(value)).ToList();
 
 static async Task<JsonObject> AskOllama(HttpClient client, string endpoint, string model, JsonObject schema, string system, string user, double temperature = 0.2, CancellationToken cancellationToken = default, string? requestId = null, bool enableThinking = false)
 {
@@ -465,6 +565,12 @@ static void RunUninstaller(bool quiet)
     };
     foreach (var shortcut in shortcuts) try { if (File.Exists(shortcut)) File.Delete(shortcut); } catch { }
     try { Registry.CurrentUser.DeleteSubKeyTree(UninstallRegistryPath, throwOnMissingSubKey: false); } catch { }
+    try
+    {
+        var settingsDirectory = Path.GetDirectoryName(GenerationMemoryStore.FilePath);
+        if (!string.IsNullOrWhiteSpace(settingsDirectory) && Directory.Exists(settingsDirectory)) Directory.Delete(settingsDirectory, recursive: true);
+    }
+    catch { }
 
     if (!quiet) MessageBox.Show("Stickyburrito's Prompt Generator will now close and remove its installed files. Ollama and downloaded models will remain installed.", "Uninstalling", MessageBoxButtons.OK, MessageBoxIcon.Information);
     var encodedPath = Convert.ToBase64String(Encoding.UTF8.GetBytes(installDir));
@@ -481,12 +587,51 @@ static void RunUninstaller(bool quiet)
     Process.Start(cleanup);
 }
 
-record PromptRequest(string? Idea, string? Model, string? Target, string? CheckpointProfile, string? Style, string? Framing, string? Quality, string? Camera, string? Location, string? Angle, string? Pose, string? Actors, string? Interaction, bool NsfwMode, string? H3Mode, string? H3Format, double? H3Duration, List<H3Scene>? H3Scenes, string? H3Dialogue, string? H3OnscreenText, string? H3Soundscape, string? H3Music, string? H3Extra, string? ImageAnalysis, List<InterviewAnswer>? ImageAnswers, string? RequestId = null, bool ShowThinking = false);
+record PromptRequest(string? Idea, string? Model, string? Target, string? CheckpointProfile, string? Style, string? Framing, string? Quality, string? Camera, string? Location, string? Angle, string? Pose, string? Actors, string? Interaction, bool NsfwMode, string? H3Mode, string? H3Format, double? H3Duration, List<H3Scene>? H3Scenes, string? H3Dialogue, string? H3OnscreenText, string? H3Soundscape, string? H3Music, string? H3Extra, string? ImageAnalysis, List<InterviewAnswer>? ImageAnswers, string? RequestId = null, bool ShowThinking = false, bool UseGenerationMemory = true);
 record InterviewRequest(string? Idea, string? Model, string? Target, string? CheckpointProfile, List<InterviewAnswer>? Answers, List<string>? AskedQuestions, List<string>? AskedQuestionIds, bool NsfwMode, string? RequestId = null, bool ShowThinking = false);
 record InterviewAnswer(string Question, string Answer);
 record ExamplesRequest(string? Model, string? Target, string? CheckpointProfile, bool NsfwMode);
 record H3Scene(double Start, double End, string? Description, string? Camera, string? Audio, string? CharacterMovement, string? Emotion);
 record ImageAnalysisRequest(string? ImageBase64, string? MimeType, string? VisionModel, bool NsfwMode, bool ShowThinking = false);
+record KreaEvaluationRequest(string? Prompt, string? ImageBase64, string? MimeType, string? VisionModel, bool NsfwMode, bool ShowThinking = false, bool RememberResult = true);
+record GenerationMemorySettingsRequest(bool Enabled);
+record GenerationMemoryEntry(DateTimeOffset CreatedAt, string Prompt, int FidelityScore, List<string> Matches, List<string> Misses, string RefinementFeedback);
+
+sealed class GenerationMemoryDocument
+{
+    public bool Enabled { get; set; } = true;
+    public List<GenerationMemoryEntry> Entries { get; set; } = [];
+}
+
+static class GenerationMemoryStore
+{
+    private static readonly object Gate = new();
+    public static string FilePath { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Stickyburritos Prompt Builder", "generation-memory.json");
+
+    public static GenerationMemoryDocument Load()
+    {
+        lock (Gate)
+        {
+            try
+            {
+                if (!File.Exists(FilePath)) return new GenerationMemoryDocument();
+                return JsonSerializer.Deserialize<GenerationMemoryDocument>(File.ReadAllText(FilePath)) ?? new GenerationMemoryDocument();
+            }
+            catch { return new GenerationMemoryDocument(); }
+        }
+    }
+
+    public static void Save(GenerationMemoryDocument document)
+    {
+        lock (Gate)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+            var temporary = FilePath + ".tmp";
+            File.WriteAllText(temporary, JsonSerializer.Serialize(document, new JsonSerializerOptions { WriteIndented = true }));
+            File.Move(temporary, FilePath, true);
+        }
+    }
+}
 
 static class ThinkingStore
 {
@@ -502,4 +647,5 @@ static class Schemas
     public static readonly JsonObject Interview = JsonNode.Parse("""{"type":"object","properties":{"questions":{"type":"array","minItems":5,"maxItems":5,"items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":"string"},"question":{"type":"string"},"suggestions":{"type":"array","items":{"type":"string"},"minItems":3,"maxItems":5}},"required":["id","label","question","suggestions"]}}},"required":["questions"]}""")!.AsObject();
     public static readonly JsonObject Examples = JsonNode.Parse("""{"type":"object","properties":{"examples":{"type":"array","minItems":3,"maxItems":3,"items":{"type":"string"}}},"required":["examples"]}""")!.AsObject();
     public static readonly JsonObject ImageAnalysis = JsonNode.Parse("""{"type":"object","properties":{"summary":{"type":"string"},"subjects":{"type":"string"},"body_description":{"type":"string"},"pose_and_contact":{"type":"string"},"wardrobe_coverage":{"type":"string"},"composition":{"type":"string"},"environment":{"type":"string"},"lighting":{"type":"string"},"visual_style":{"type":"string"},"motion_opportunities":{"type":"array","items":{"type":"string"}},"questions":{"type":"array","maxItems":4,"items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":"string"},"question":{"type":"string"},"suggestions":{"type":"array","items":{"type":"string"},"maxItems":4}},"required":["id","label","question","suggestions"]}}},"required":["summary","subjects","body_description","pose_and_contact","wardrobe_coverage","composition","environment","lighting","visual_style","motion_opportunities","questions"]}""")!.AsObject();
+    public static readonly JsonObject KreaEvaluation = JsonNode.Parse("""{"type":"object","properties":{"fidelity_score":{"type":"integer"},"summary":{"type":"string"},"matches":{"type":"array","items":{"type":"string"}},"misses":{"type":"array","items":{"type":"string"}},"guide_alignment":{"type":"array","items":{"type":"string"}},"refinement_feedback":{"type":"string"}},"required":["fidelity_score","summary","matches","misses","guide_alignment","refinement_feedback"]}""")!.AsObject();
 }

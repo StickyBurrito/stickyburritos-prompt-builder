@@ -3,7 +3,7 @@
 
   const $ = (id) => document.getElementById(id);
   const interviewQuestionTarget = 100;
-  const state = { tags: [], interviewAnswers: [], interviewAsked: [], interviewAskedIds: [], interviewTarget: null, refinementHistory: [], autoRegenerateTimer: null, examplesController: null, imageAnalysis: null, imageObjectUrl: null };
+  const state = { tags: [], interviewAnswers: [], interviewAsked: [], interviewAskedIds: [], interviewTarget: null, refinementHistory: [], autoRegenerateTimer: null, examplesController: null, imageAnalysis: null, imageObjectUrl: null, kreaResultFile: null, kreaResultObjectUrl: null, kreaEvaluation: null };
 
   function showOllamaThinking(thinking, context = "request") {
     const panel = $("thinkingPanel");
@@ -521,6 +521,110 @@
     } catch (error) { $("imageAnalysisStatus").textContent = "Analysis failed"; $("imageAnalysisSummary").textContent = error.message; }
   }
 
+  function resetKreaEvaluation(clearImage = true) {
+    state.kreaEvaluation = null;
+    if (clearImage) {
+      state.kreaResultFile = null;
+      $("kreaResultImage").value = "";
+      if (state.kreaResultObjectUrl) URL.revokeObjectURL(state.kreaResultObjectUrl);
+      state.kreaResultObjectUrl = null;
+      $("kreaEvaluationWorkspace").hidden = true;
+      $("evaluateKreaResult").disabled = true;
+    }
+    $("kreaScore").textContent = "—";
+    $("kreaEvaluationSummary").textContent = "";
+    $("kreaEvaluationDetails").hidden = true;
+    $("kreaMatches").replaceChildren();
+    $("kreaMisses").replaceChildren();
+    $("kreaGuideAlignment").replaceChildren();
+    $("useKreaFeedback").hidden = true;
+    $("kreaEvaluationStatus").textContent = "";
+  }
+
+  function selectKreaResult(file) {
+    resetKreaEvaluation();
+    if (!file) return;
+    state.kreaResultFile = file;
+    state.kreaResultObjectUrl = URL.createObjectURL(file);
+    $("kreaResultPreview").src = state.kreaResultObjectUrl;
+    $("kreaEvaluationWorkspace").hidden = false;
+    $("kreaEvaluationModel").textContent = "Ready for local comparison";
+    $("kreaEvaluationSummary").textContent = "Click Check against prompt to compare visible evidence with the exact Krea prompt above.";
+    $("evaluateKreaResult").disabled = false;
+  }
+
+  function renderEvaluationItems(id, items) {
+    $(id).replaceChildren(...(items || []).map(value => { const item=document.createElement("li"); item.textContent=value; return item; }));
+  }
+
+  async function evaluateKreaResult() {
+    if (!state.kreaResultFile) { $("kreaResultImage").click(); return; }
+    const prompt = $("positive").value.trim();
+    if (!prompt) { $("kreaEvaluationStatus").textContent = "Generate or paste a Krea prompt first."; return; }
+    const button = $("evaluateKreaResult"); button.disabled = true; button.firstChild.textContent = "Checking locally… ";
+    $("kreaEvaluationStatus").textContent = "Qwen Vision is comparing the generated image with the exact Krea prompt…";
+    try {
+      const prepared = await prepareImage(state.kreaResultFile);
+      const response = await fetch("/api/evaluate-krea-image", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ prompt, ...prepared, visionModel:$("visionModel").value.trim(), nsfwMode:$("nsfwMode").checked, showThinking:$("showThinking").checked, rememberResult:$("generationMemory").checked }) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Krea result evaluation failed");
+      state.kreaEvaluation = data;
+      if ($("showThinking").checked) showOllamaThinking(data.ollama_thinking, "Krea result review");
+      $("kreaScore").textContent = `${data.fidelity_score ?? 0}%`;
+      $("kreaEvaluationModel").textContent = `Checked locally with ${data.model || $("visionModel").value}`;
+      $("kreaEvaluationSummary").textContent = data.summary || "Local comparison complete.";
+      renderEvaluationItems("kreaMatches", data.matches);
+      renderEvaluationItems("kreaMisses", data.misses);
+      renderEvaluationItems("kreaGuideAlignment", data.guide_alignment);
+      $("kreaEvaluationDetails").hidden = false;
+      $("useKreaFeedback").hidden = !data.refinement_feedback;
+      $("kreaEvaluationStatus").textContent = data.remembered ? `Review complete. Learned locally from ${data.memory_count} checked generation${data.memory_count === 1 ? "" : "s"}.` : "Review complete. This result was not added to local memory.";
+      updateMemoryStatus(data.memory_count);
+    } catch (error) {
+      $("kreaEvaluationStatus").textContent = `Could not check the image: ${error.message}`;
+    } finally { button.disabled = false; button.firstChild.textContent = "Check against prompt "; }
+  }
+
+  function useKreaFeedback() {
+    const feedback = state.kreaEvaluation?.refinement_feedback;
+    if (!feedback) return;
+    $("refinementFeedback").value = feedback;
+    $("refinementStatus").textContent = "Krea review feedback is ready. Apply it to regenerate while preserving prior details.";
+    $("refinementFeedback").scrollIntoView({ behavior:"smooth", block:"center" });
+    $("refinementFeedback").focus();
+  }
+
+  function updateMemoryStatus(count) {
+    const total = Number(count || 0);
+    $("memoryStatus").textContent = `${total} learned generation${total === 1 ? "" : "s"}`;
+  }
+
+  async function loadGenerationMemory() {
+    try {
+      const response = await fetch("/api/generation-memory", { cache:"no-store" });
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      $("generationMemory").checked = data.enabled !== false;
+      updateMemoryStatus(data.count);
+    } catch { $("memoryStatus").textContent = "Memory unavailable"; }
+  }
+
+  async function setGenerationMemory(enabled) {
+    try {
+      const response = await fetch("/api/generation-memory/settings", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ enabled }) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not update memory");
+      updateMemoryStatus(data.count);
+      $("kreaEvaluationStatus").textContent = enabled ? "Local generation learning enabled." : "Local generation learning paused. Existing lessons are preserved.";
+    } catch (error) { $("generationMemory").checked = !enabled; $("kreaEvaluationStatus").textContent = error.message; }
+  }
+
+  async function clearGenerationMemory() {
+    try {
+      const response = await fetch("/api/generation-memory", { method:"DELETE" });
+      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not clear memory");
+      updateMemoryStatus(0); $("kreaEvaluationStatus").textContent = "Local Krea generation memory cleared.";
+    } catch (error) { $("kreaEvaluationStatus").textContent = error.message; }
+  }
+
   async function generatePrompt(refinementInstruction = "", previousPrompt = "") {
     cancelExampleLoad();
     const idea = buildPromptIdea();
@@ -541,7 +645,7 @@
       rollButton.disabled = true; rollButton.firstChild.textContent = "Thinking… ";
       const liveThinking = $("showThinking").checked ? beginLiveThinking("prompt generation") : { requestId:null, stop:()=>{} };
       try {
-        const response = await fetch("/api/ollama", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ idea:enrichedIdea, model:$("model").value.trim(), target:$("target").value, checkpointProfile:$("checkpointProfile").value, style:$("style").value, framing:$("framing").value, quality:$("quality").value, camera:$("camera").value, location:$("location").value, angle:$("angle").value, pose:$("pose").value, actors:$("actors").value, interaction:$("interaction").value, nsfwMode:$("nsfwMode").checked, h3Mode:$("h3Mode").value, h3Format:$("h3Format").value, h3Duration:Number($("h3Duration").value), h3Scenes:collectScenes(), h3Dialogue:$("h3Dialogue").value.trim(), h3OnscreenText:$("h3OnscreenText").value.trim(), h3Soundscape:$("h3Soundscape").value.trim(), h3Music:$("h3Music").value.trim(), h3Extra:$("h3Extra").value.trim(), imageAnalysis:state.imageAnalysis ? JSON.stringify(state.imageAnalysis) : null, imageAnswers:collectImageAnswers(), requestId:liveThinking.requestId, showThinking:$("showThinking").checked }) });
+        const response = await fetch("/api/ollama", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ idea:enrichedIdea, model:$("model").value.trim(), target:$("target").value, checkpointProfile:$("checkpointProfile").value, style:$("style").value, framing:$("framing").value, quality:$("quality").value, camera:$("camera").value, location:$("location").value, angle:$("angle").value, pose:$("pose").value, actors:$("actors").value, interaction:$("interaction").value, nsfwMode:$("nsfwMode").checked, h3Mode:$("h3Mode").value, h3Format:$("h3Format").value, h3Duration:Number($("h3Duration").value), h3Scenes:collectScenes(), h3Dialogue:$("h3Dialogue").value.trim(), h3OnscreenText:$("h3OnscreenText").value.trim(), h3Soundscape:$("h3Soundscape").value.trim(), h3Music:$("h3Music").value.trim(), h3Extra:$("h3Extra").value.trim(), imageAnalysis:state.imageAnalysis ? JSON.stringify(state.imageAnalysis) : null, imageAnswers:collectImageAnswers(), requestId:liveThinking.requestId, showThinking:$("showThinking").checked, useGenerationMemory:$("generationMemory").checked }) });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Local AI request failed");
         if ($("showThinking").checked) showOllamaThinking(data.ollama_thinking, "prompt generation");
@@ -550,7 +654,8 @@
         if (state.outputFormat === "danbooru") { state.tags = unique(data.tags || []); render(); }
         else { state.tags = []; $("positive").value = data.prompt || ""; $("tagEditor").hidden = true; }
         $("negative").value = data.negative || (state.outputFormat === "danbooru" ? negative : "");
-        renderAIVariants(data.variants || []); $("result").hidden = false;
+        renderAIVariants(data.variants || []); $("result").hidden = false; $("kreaReview").hidden = state.outputFormat !== "krea2";
+        if (state.outputFormat === "krea2" && state.kreaResultFile) { resetKreaEvaluation(false); $("kreaEvaluationStatus").textContent = "Prompt regenerated—check the uploaded result again against the new version."; }
         $("engineStatus").textContent = `Generated locally with ${data.model || $("model").value}.`;
         $("result").scrollIntoView({ behavior:"smooth", block:"start" }); return true;
       } catch (error) {
@@ -589,6 +694,7 @@
     const target = $("target").value;
     $("profileLabel").hidden = target !== "danbooru";
     $("h3Panel").hidden = target !== "minimax_h3";
+    $("kreaReview").hidden = target !== "krea2" || $("result").hidden;
     if (target === "krea2") $("style").value = "photo";
     if (target === "minimax_h3" && !$("scenes").children.length) resetScenes();
     syncH3Mode();
@@ -606,7 +712,7 @@
     $("questions").replaceChildren(); $("answerCount").textContent = "0 answered";
     $("thinkingPanel").hidden = true; $("thinkingPanel").open = false; $("thinkingText").textContent = "";
     $("askMore").hidden = false; $("askMore").textContent = "Ask next questions";
-    $("interview").hidden = true; $("result").hidden = true; $("variantsCard").hidden = true;
+    $("interview").hidden = true; $("result").hidden = true; $("variantsCard").hidden = true; $("kreaReview").hidden = true; resetKreaEvaluation();
     $("roll").hidden = false; $("roll").disabled = false; $("roll").firstChild.textContent = "Start prompt interview ";
     $("positive").value = ""; $("negative").value = ""; $("refinementFeedback").value = ""; $("refinementStatus").textContent = ""; $("resultTitle").textContent = "Ready for your workflow"; $("tags").replaceChildren();
     $("engineStatus").textContent = "Prompt reset. Enter a new idea when you’re ready.";
@@ -663,7 +769,7 @@
       const content = natural ? (variant.prompt || "") : unique(variant.tags || []);
       const button = document.createElement("button"); button.className = "variant";
       button.innerHTML = `${variant.name || `Variant ${index + 1}`}<small>${natural ? content : content.join(", ")}</small>`;
-      button.addEventListener("click", () => { if (natural) $("positive").value = content; else { state.tags = content; render(); } }); return button;
+      button.addEventListener("click", () => { if (natural) { $("positive").value = content; if (state.outputFormat === "krea2" && state.kreaResultFile) { resetKreaEvaluation(false); $("kreaEvaluationStatus").textContent = "Prompt changed—check the uploaded result again against this variant."; } } else { state.tags = content; render(); } }); return button;
     }));
   }
 
@@ -737,6 +843,11 @@
   $("resetPrompt").addEventListener("click", resetPrompt);
   $("refinePrompt").addEventListener("click", refinePrompt);
   $("refineQuestions").addEventListener("click", refineWithQuestions);
+  $("kreaResultImage").addEventListener("change", event => selectKreaResult(event.target.files[0]));
+  $("evaluateKreaResult").addEventListener("click", evaluateKreaResult);
+  $("useKreaFeedback").addEventListener("click", useKreaFeedback);
+  $("generationMemory").addEventListener("change", event => setGenerationMemory(event.target.checked));
+  $("clearMemory").addEventListener("click", clearGenerationMemory);
   $("target").addEventListener("change", () => {
     const target = $("target").value;
     const switchedBetweenImageAndVideo = state.interviewTarget && (state.interviewTarget === "minimax_h3") !== (target === "minimax_h3");
@@ -768,7 +879,10 @@
   $("copyPositive").addEventListener("click", () => copy($("positive").value, $("copyPositive")));
   $("copyNegative").addEventListener("click", () => copy($("negative").value, $("copyNegative")));
   $("copyAll").addEventListener("click", () => copy(`POSITIVE\n${$("positive").value}\n\nNEGATIVE\n${$("negative").value}`, $("copyAll")));
-  $("positive").addEventListener("change", () => { state.tags = unique($("positive").value.split(",")); render(); });
+  $("positive").addEventListener("change", () => {
+    if (state.outputFormat === "danbooru") { state.tags = unique($("positive").value.split(",")); render(); }
+    else if (state.outputFormat === "krea2" && state.kreaResultFile) { resetKreaEvaluation(false); $("kreaEvaluationStatus").textContent = "Prompt edited—check the uploaded result again against the updated prompt."; }
+  });
   document.querySelectorAll("[data-example]").forEach((button) => button.addEventListener("click", () => { $("idea").value = button.dataset.example; $("idea").focus(); }));
   async function initialize() {
     try {
@@ -780,6 +894,7 @@
       }
     } catch { /* Keep the bundled defaults when running without the .NET host. */ }
     syncTargetControls();
+    loadGenerationMemory();
     loadExamples();
   }
   initialize();

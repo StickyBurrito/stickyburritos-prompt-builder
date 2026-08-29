@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/StickyBurrito/stickyburritos-prompt-builder/releases/latest/download/Stickyburritos-Prompt-Generator-Setup.exe"><img src="https://img.shields.io/badge/Download-Windows_installer-ff299d?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows installer"></a>
-  <a href="https://github.com/StickyBurrito/stickyburritos-prompt-builder/releases/latest"><img src="https://img.shields.io/badge/Release-v1.1.2-00cfff?style=for-the-badge&logo=github&logoColor=white" alt="Latest release: v1.1.2"></a>
+  <a href="https://github.com/StickyBurrito/stickyburritos-prompt-builder/releases/latest"><img src="https://img.shields.io/badge/Release-v1.2.0-00cfff?style=for-the-badge&logo=github&logoColor=white" alt="Latest release: v1.2.0"></a>
   <a href="https://paypal.me/StickyBurrito"><img src="https://img.shields.io/badge/Support_with-PayPal-0070E0?style=for-the-badge&logo=paypal&logoColor=white" alt="Support with PayPal"></a>
 </p>
 
@@ -31,6 +31,8 @@ The installer handles the whole local stack. It can install or update Ollama, do
 - **Local prompt interviews** — Ollama asks five focused questions at a time and can continue toward 100 distinct details. Skipped questions stay skipped.
 - **Danbooru and Pony V6 XL** — Generates ordered booru tags, Pony score/source/rating tags, negative prompts, and camera variants for ComfyUI.
 - **Krea 2** — Produces faithful, cohesive natural-language prompts based on the [official Krea 2 prompting guidance](https://github.com/krea-ai/krea-2/blob/main/docs/prompting.md), with photorealism as the default when no other medium is selected.
+- **Krea result checker** — Upload the image Krea produced and have the local vision model score prompt fidelity, list matches and misses, check guide alignment, and prepare refinement feedback.
+- **Local generation learning** — Checked Krea results can teach the generator reusable reliability lessons for later prompts. Only prompt text and evaluation notes are stored locally; uploaded result images are never saved.
 - **MiniMax H3 T2V** — Builds production-style video prompts with timed scenes, camera movement, character movement, emotion, transitions, dialogue, sound, and music.
 - **MiniMax H3 I2V** — Upload a first frame, analyze it locally with a vision model, and create motion that begins from the actual image composition.
 - **Cumulative refinement** — Tell the generator what worked or what should change. Earlier refinements remain part of later regenerations.
@@ -67,7 +69,7 @@ You can override the recommendation before installation. More VRAM does not remo
 
 ## Privacy and connectivity
 
-Prompt interviews, image analysis, reasoning, and prompt generation go through Ollama on `127.0.0.1` and stay on your computer. The app does not send your prompt to an external AI service.
+Prompt interviews, image analysis, Krea result reviews, reasoning, and prompt generation go through Ollama on `127.0.0.1` and stay on your computer. The app does not send your prompt to an external AI service. Krea generation memory is stored under your Windows local application-data folder, can be paused or cleared from the result checker, and is removed by the uninstaller.
 
 Internet access is still used when setup downloads Ollama and local models. Optional Danbooru autocomplete queries Danbooru directly and silently falls back when unavailable.
 

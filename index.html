@@ -210,6 +210,37 @@
         <div id="variants" class="variants"></div>
       </div>
 
+      <div id="kreaReview" class="panel krea-review-card" hidden>
+        <div class="output-label"><span>CHECK THE KREA RESULT</span><span>Local vision review</span></div>
+        <p>Upload the image Krea created. Qwen Vision compares it with the exact prompt and turns any misses into refinement feedback.</p>
+        <div class="krea-memory-bar">
+          <label class="memory-toggle"><input id="generationMemory" type="checkbox" checked><span><strong>Learn from checked generations</strong><small>Stores prompt lessons locally—never the image</small></span></label>
+          <span id="memoryStatus">Local memory loading…</span>
+          <button id="clearMemory" class="text-action" type="button">Clear memory</button>
+        </div>
+        <label class="image-drop krea-result-drop" for="kreaResultImage">
+          <input id="kreaResultImage" type="file" accept="image/png,image/jpeg,image/webp">
+          <span><strong>Upload the generated Krea image</strong><small>PNG, JPEG, or WebP · processed only by local Ollama</small></span>
+        </label>
+        <div id="kreaEvaluationWorkspace" class="krea-evaluation-workspace" hidden>
+          <img id="kreaResultPreview" alt="Generated Krea result preview">
+          <div class="krea-evaluation-copy">
+            <div class="krea-score-row"><span id="kreaScore" class="krea-score">—</span><div><strong>Prompt fidelity</strong><small id="kreaEvaluationModel">Waiting for local review</small></div></div>
+            <p id="kreaEvaluationSummary"></p>
+            <div id="kreaEvaluationDetails" class="krea-evaluation-details" hidden>
+              <section><h3>Matched</h3><ul id="kreaMatches"></ul></section>
+              <section><h3>Missed or drifted</h3><ul id="kreaMisses"></ul></section>
+              <section><h3>Krea guide check</h3><ul id="kreaGuideAlignment"></ul></section>
+            </div>
+          </div>
+        </div>
+        <p id="kreaEvaluationStatus" class="refinement-status" aria-live="polite"></p>
+        <div class="krea-review-actions">
+          <button id="useKreaFeedback" class="secondary-action" type="button" hidden>Use feedback below</button>
+          <button id="evaluateKreaResult" class="primary-action" type="button" disabled>Check against prompt <span>→</span></button>
+        </div>
+      </div>
+
       <div class="panel refinement-card">
         <div class="output-label"><span>REFINE AFTER GENERATING</span><span>Optional</span></div>
         <p>After trying the prompt in ComfyUI, tell Ollama what worked or what needs changing.</p>
