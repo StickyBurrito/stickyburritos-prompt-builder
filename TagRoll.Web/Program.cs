@@ -215,11 +215,11 @@ app.MapPost("/api/analyze-image", async (ImageAnalysisRequest request, IHttpClie
         var body = new JsonObject
         {
             ["model"] = model, ["stream"] = false, ["think"] = request.ShowThinking, ["format"] = Schemas.ImageAnalysis.DeepClone(),
-            ["options"] = new JsonObject { ["temperature"] = 0.15, ["num_predict"] = 1800 },
+            ["options"] = new JsonObject { ["temperature"] = 0.15, ["num_predict"] = 1800, ["num_ctx"] = 8192 },
             ["messages"] = new JsonArray
             {
-                new JsonObject { ["role"] = "system", ["content"] = VisionSystem },
-                new JsonObject { ["role"] = "user", ["content"] = $"Analyze this as MiniMax H3 Picture 1. Describe the exact first frame and ask only useful motion/audio clarifications. Content mode: {(request.NsfwMode ? "NSFW enabled—use direct, explicit anatomical language for every visibly exposed adult body feature and exact garment coverage." : "standard—remain literal about visible content without inventing details.")}", ["images"] = new JsonArray(request.ImageBase64) }
+                new JsonObject { ["role"] = "system", ["content"] = request.Target == "image" ? "Describe a still reference image for image prompting. Report visible subjects, pose, wardrobe, composition, environment, lighting and visual_style. Be precise about medium, linework, shading, palette, texture and realism. Do not guess identity or an artist. No video, motion or audio instructions. Return empty questions and motion_opportunities arrays. Output only schema-valid JSON." : VisionSystem },
+                new JsonObject { ["role"] = "user", ["content"] = request.Target == "image" ? "Describe this still image and its visual style as an editable starting point for a new image prompt." : $"Analyze this as MiniMax H3 Picture 1. Describe the exact first frame and ask only useful motion/audio clarifications. Content mode: {(request.NsfwMode ? "NSFW enabled—use direct, explicit anatomical language for every visibly exposed adult body feature and exact garment coverage." : "standard—remain literal about visible content without inventing details.")}", ["images"] = new JsonArray(request.ImageBase64) }
             }
         };
         using var response = await clients.CreateClient("ollama").PostAsJsonAsync(config["Ollama:Endpoint"]!, body, cancellationToken);
@@ -241,7 +241,7 @@ app.MapPost("/api/analyze-image", async (ImageAnalysisRequest request, IHttpClie
 app.MapGet("/api/generation-memory", () =>
 {
     var memory = GenerationMemoryStore.Load();
-    return Results.Json(new { enabled = memory.Enabled, count = memory.Entries.Count, path = GenerationMemoryStore.FilePath });
+    return Results.Json(new { enabled = memory.Enabled, count = memory.Entries.Count, corrections = memory.Corrections, path = GenerationMemoryStore.FilePath });
 });
 
 app.MapPost("/api/generation-memory/settings", (GenerationMemorySettingsRequest request) =>
@@ -256,8 +256,21 @@ app.MapDelete("/api/generation-memory", () =>
 {
     var memory = GenerationMemoryStore.Load();
     memory.Entries.Clear();
+    memory.Corrections.Clear();
     GenerationMemoryStore.Save(memory);
     return Results.Json(new { enabled = memory.Enabled, count = 0 });
+});
+
+app.MapPost("/api/generation-memory/correction", (CharacterCorrection request) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Subject) || request.Subject.Length > 120 || request.Remarks is null || request.Remarks.Length > 6000)
+        return Results.BadRequest(new { error = "Enter a character name (up to 120 characters) and notes up to 6000 characters." });
+    var memory = GenerationMemoryStore.Load();
+    memory.Corrections.RemoveAll(x => string.Equals(x.Subject, request.Subject.Trim(), StringComparison.OrdinalIgnoreCase));
+    memory.Entries.RemoveAll(x => string.Equals(x.Subject, request.Subject.Trim(), StringComparison.OrdinalIgnoreCase));
+    if (!string.IsNullOrWhiteSpace(request.Remarks)) memory.Corrections.Add(new(request.Subject.Trim(), request.Remarks.Trim()));
+    GenerationMemoryStore.Save(memory);
+    return Results.Json(new { corrections = memory.Corrections });
 });
 
 app.MapPost("/api/evaluate-krea-image", async (KreaEvaluationRequest request, IHttpClientFactory clients, IConfiguration config, CancellationToken cancellationToken) =>
@@ -267,21 +280,27 @@ app.MapPost("/api/evaluate-krea-image", async (KreaEvaluationRequest request, IH
     var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "image/png", "image/jpeg", "image/webp" };
     if (!allowed.Contains(request.MimeType ?? "")) return Results.BadRequest(new { error = "Only PNG, JPEG, and WebP images are supported." });
     if (request.ImageBase64.Length > 16_000_000) return Results.BadRequest(new { error = "The processed image is too large." });
+    if (request.ReferenceImageBase64?.Length > 16_000_000 || request.Remarks?.Length > 6000 || request.Subject?.Length > 120)
+        return Results.BadRequest(new { error = "The reference image or remarks are too large." });
     var model = string.IsNullOrWhiteSpace(request.VisionModel) ? config["Ollama:VisionModel"] ?? "huihui_ai/qwen3-vl-abliterated:8b-instruct-q4_K_M" : request.VisionModel;
     try
     {
+        var images = new JsonArray(request.ImageBase64);
+        if (!string.IsNullOrWhiteSpace(request.ReferenceImageBase64)) images.Add(request.ReferenceImageBase64);
         var body = new JsonObject
         {
             ["model"] = model, ["stream"] = false, ["think"] = request.ShowThinking, ["format"] = Schemas.KreaEvaluation.DeepClone(),
-            ["options"] = new JsonObject { ["temperature"] = 0.1, ["num_predict"] = 1800 },
+            ["options"] = new JsonObject { ["temperature"] = 0.1, ["num_predict"] = 1800, ["num_ctx"] = 8192 },
             ["messages"] = new JsonArray
             {
                 new JsonObject { ["role"] = "system", ["content"] = KreaEvaluationSystem },
                 new JsonObject
                 {
                     ["role"] = "user",
-                    ["content"] = $"Compare this generated image against this exact Krea prompt:\n{request.Prompt}\n\nContent mode: {(request.NsfwMode ? "NSFW enabled; use direct literal visual terminology." : "standard.")}",
-                    ["images"] = new JsonArray(request.ImageBase64)
+                    ["content"] = $"Image 1 is the generated result. Compare it against this exact Krea prompt:\n{request.Prompt}\n\nUser corrections for this review (take precedence over conflicting prompt details):\n{request.Remarks}\nCharacter name: {request.Subject}\n" +
+                        (images.Count > 1 ? "Image 2 is the desired character reference, NOT another generated result. Compare identity traits such as hair color, hairstyle, eyes, and accessories. Do not copy its pose, setting, or clothing unless requested. Return reference_traits as a short factual description of stable identity traits only, with no scene or pose information. User corrections override your interpretation.\n" : "Return an empty reference_traits string because no reference image was supplied.\n") +
+                        $"Content mode: {(request.NsfwMode ? "NSFW enabled; use direct literal visual terminology." : "standard.")}",
+                    ["images"] = images
                 }
             }
         };
@@ -299,13 +318,24 @@ app.MapPost("/api/evaluate-krea-image", async (KreaEvaluationRequest request, IH
         var memory = GenerationMemoryStore.Load();
         if (request.RememberResult && memory.Enabled)
         {
+            if (!string.IsNullOrWhiteSpace(request.Subject) && (!string.IsNullOrWhiteSpace(request.Remarks) || images.Count > 1))
+            {
+                var traits = images.Count > 1 ? result["reference_traits"]?.GetValue<string>() : null;
+                var notes = string.Join("\n", new[] { request.Remarks?.Trim(), string.IsNullOrWhiteSpace(traits) ? null : "Reference traits (user remarks take precedence): " + traits }.Where(x => !string.IsNullOrWhiteSpace(x)));
+                if (!string.IsNullOrWhiteSpace(notes))
+                {
+                    memory.Corrections.RemoveAll(x => string.Equals(x.Subject, request.Subject.Trim(), StringComparison.OrdinalIgnoreCase));
+                    memory.Corrections.Add(new(request.Subject.Trim(), notes));
+                    result["saved_character_notes"] = notes;
+                }
+            }
             memory.Entries.Add(new GenerationMemoryEntry(
                 DateTimeOffset.UtcNow,
                 request.Prompt.Trim(),
                 result["fidelity_score"]?.GetValue<int>() ?? 0,
                 JsonArrayStrings(result["matches"]),
                 JsonArrayStrings(result["misses"]),
-                result["refinement_feedback"]?.GetValue<string>() ?? ""));
+                result["refinement_feedback"]?.GetValue<string>() ?? "", request.Subject?.Trim()));
             if (memory.Entries.Count > 50) memory.Entries.RemoveRange(0, memory.Entries.Count - 50);
             GenerationMemoryStore.Save(memory);
         }
@@ -338,12 +368,22 @@ app.MapPost("/api/ollama", async (PromptRequest request, IHttpClientFactory clie
                $"Interaction: {request.Interaction ?? "auto"}\n" +
                $"Content direction: {(request.NsfwMode ? "NSFW mode enabled; favor adult erotic, nude, suggestive, or explicit visual details where they fit the request" : "standard mode")}\n" +
                "Treat every value other than auto as an explicit requirement.";
+    if (request.UseGenerationMemory)
+    {
+        var memory = GenerationMemoryStore.Load();
+        if (memory.Enabled)
+        {
+            var relevant = memory.Corrections.Where(x => Regex.IsMatch(request.Idea ?? "", @"(?<!\w)" + Regex.Escape(x.Subject) + @"(?!\w)", RegexOptions.IgnoreCase));
+            user += "\nSAVED CHARACTER CORRECTIONS — apply only to the named character. Current explicit user instructions override these notes:\n" +
+                string.Join("\n", relevant.Select(x => $"{x.Subject}: {x.Remarks}"));
+        }
+    }
     if (target == "krea2" && request.UseGenerationMemory)
     {
         var memory = GenerationMemoryStore.Load();
         if (memory.Enabled && memory.Entries.Count > 0)
         {
-            var lessons = memory.Entries.TakeLast(8).Select((entry, index) =>
+            var lessons = memory.Entries.Where(entry => string.IsNullOrWhiteSpace(entry.Subject) || Regex.IsMatch(request.Idea ?? "", @"(?<!\w)" + Regex.Escape(entry.Subject) + @"(?!\w)", RegexOptions.IgnoreCase)).TakeLast(8).Select((entry, index) =>
                 $"{index + 1}. Prior fidelity {entry.FidelityScore}/100. Preserve successes: {string.Join("; ", entry.Matches.Take(4))}. Prevent prior misses: {string.Join("; ", entry.Misses.Take(5))}. Learned correction: {entry.RefinementFeedback}");
             user += "\n\nLOCAL KREA GENERATION MEMORY — use these as general reliability lessons only when relevant; never copy unrelated scene content:\n" + string.Join("\n", lessons);
         }
@@ -395,7 +435,49 @@ if (args.Contains("--open-browser", StringComparer.OrdinalIgnoreCase))
         catch { /* The server remains usable even when Windows cannot open the default browser. */ }
     });
 
-app.Run();
+await app.StartAsync();
+var trayThread = new Thread(() =>
+{
+    try
+    {
+        using var dispatcher = new System.Windows.Forms.Control();
+        _ = dispatcher.Handle;
+        using var menu = new System.Windows.Forms.ContextMenuStrip();
+        var address = app.Urls.FirstOrDefault() ?? "http://localhost:8765";
+        void OpenApp()
+        {
+            try { Process.Start(new ProcessStartInfo(address) { UseShellExecute = true }); }
+            catch (Exception ex) { app.Logger.LogWarning(ex, "Could not open the prompt generator in the browser."); }
+        }
+        menu.Items.Add("Open prompt generator", null, (_, _) => OpenApp());
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        menu.Items.Add("Exit", null, (_, _) => app.Lifetime.StopApplication());
+        using var icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!)
+            ?? (System.Drawing.Icon)System.Drawing.SystemIcons.Application.Clone();
+        using var tray = new System.Windows.Forms.NotifyIcon
+        {
+            Icon = icon,
+            Text = ProductName,
+            ContextMenuStrip = menu,
+            Visible = true
+        };
+        tray.DoubleClick += (_, _) => OpenApp();
+        using var stopping = app.Lifetime.ApplicationStopping.Register(() =>
+            dispatcher.BeginInvoke((Action)System.Windows.Forms.Application.ExitThread));
+        System.Windows.Forms.Application.Run();
+        tray.Visible = false;
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "The prompt generator tray could not start.");
+        app.Lifetime.StopApplication();
+    }
+});
+trayThread.SetApartmentState(ApartmentState.STA);
+trayThread.Start();
+await app.WaitForShutdownAsync();
+trayThread.Join();
+await app.DisposeAsync();
 
 static List<string> JsonArrayStrings(JsonNode? node) =>
     (node as JsonArray ?? []).Select(item => item?.GetValue<string>() ?? "").Where(value => !string.IsNullOrWhiteSpace(value)).ToList();
@@ -592,15 +674,17 @@ record InterviewRequest(string? Idea, string? Model, string? Target, string? Che
 record InterviewAnswer(string Question, string Answer);
 record ExamplesRequest(string? Model, string? Target, string? CheckpointProfile, bool NsfwMode);
 record H3Scene(double Start, double End, string? Description, string? Camera, string? Audio, string? CharacterMovement, string? Emotion);
-record ImageAnalysisRequest(string? ImageBase64, string? MimeType, string? VisionModel, bool NsfwMode, bool ShowThinking = false);
-record KreaEvaluationRequest(string? Prompt, string? ImageBase64, string? MimeType, string? VisionModel, bool NsfwMode, bool ShowThinking = false, bool RememberResult = true);
+record ImageAnalysisRequest(string? ImageBase64, string? MimeType, string? VisionModel, bool NsfwMode, bool ShowThinking = false, string? Target = null);
+record KreaEvaluationRequest(string? Prompt, string? ImageBase64, string? MimeType, string? VisionModel, bool NsfwMode, bool ShowThinking = false, bool RememberResult = true, string? Remarks = null, string? Subject = null, string? ReferenceImageBase64 = null);
+record CharacterCorrection(string Subject, string Remarks);
 record GenerationMemorySettingsRequest(bool Enabled);
-record GenerationMemoryEntry(DateTimeOffset CreatedAt, string Prompt, int FidelityScore, List<string> Matches, List<string> Misses, string RefinementFeedback);
+record GenerationMemoryEntry(DateTimeOffset CreatedAt, string Prompt, int FidelityScore, List<string> Matches, List<string> Misses, string RefinementFeedback, string? Subject = null);
 
 sealed class GenerationMemoryDocument
 {
     public bool Enabled { get; set; } = true;
     public List<GenerationMemoryEntry> Entries { get; set; } = [];
+    public List<CharacterCorrection> Corrections { get; set; } = [];
 }
 
 static class GenerationMemoryStore
@@ -647,5 +731,5 @@ static class Schemas
     public static readonly JsonObject Interview = JsonNode.Parse("""{"type":"object","properties":{"questions":{"type":"array","minItems":5,"maxItems":5,"items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":"string"},"question":{"type":"string"},"suggestions":{"type":"array","items":{"type":"string"},"minItems":3,"maxItems":5}},"required":["id","label","question","suggestions"]}}},"required":["questions"]}""")!.AsObject();
     public static readonly JsonObject Examples = JsonNode.Parse("""{"type":"object","properties":{"examples":{"type":"array","minItems":3,"maxItems":3,"items":{"type":"string"}}},"required":["examples"]}""")!.AsObject();
     public static readonly JsonObject ImageAnalysis = JsonNode.Parse("""{"type":"object","properties":{"summary":{"type":"string"},"subjects":{"type":"string"},"body_description":{"type":"string"},"pose_and_contact":{"type":"string"},"wardrobe_coverage":{"type":"string"},"composition":{"type":"string"},"environment":{"type":"string"},"lighting":{"type":"string"},"visual_style":{"type":"string"},"motion_opportunities":{"type":"array","items":{"type":"string"}},"questions":{"type":"array","maxItems":4,"items":{"type":"object","properties":{"id":{"type":"string"},"label":{"type":"string"},"question":{"type":"string"},"suggestions":{"type":"array","items":{"type":"string"},"maxItems":4}},"required":["id","label","question","suggestions"]}}},"required":["summary","subjects","body_description","pose_and_contact","wardrobe_coverage","composition","environment","lighting","visual_style","motion_opportunities","questions"]}""")!.AsObject();
-    public static readonly JsonObject KreaEvaluation = JsonNode.Parse("""{"type":"object","properties":{"fidelity_score":{"type":"integer"},"summary":{"type":"string"},"matches":{"type":"array","items":{"type":"string"}},"misses":{"type":"array","items":{"type":"string"}},"guide_alignment":{"type":"array","items":{"type":"string"}},"refinement_feedback":{"type":"string"}},"required":["fidelity_score","summary","matches","misses","guide_alignment","refinement_feedback"]}""")!.AsObject();
+    public static readonly JsonObject KreaEvaluation = JsonNode.Parse("""{"type":"object","properties":{"fidelity_score":{"type":"integer"},"summary":{"type":"string"},"matches":{"type":"array","items":{"type":"string"}},"misses":{"type":"array","items":{"type":"string"}},"guide_alignment":{"type":"array","items":{"type":"string"}},"refinement_feedback":{"type":"string"},"reference_traits":{"type":"string"}},"required":["fidelity_score","summary","matches","misses","guide_alignment","refinement_feedback","reference_traits"]}""")!.AsObject();
 }

@@ -476,7 +476,12 @@
 
   function buildPromptIdea() {
     const mainIdea = $("idea").value.trim();
-    if ($("target").value !== "minimax_h3") return mainIdea;
+    if ($("target").value !== "minimax_h3") {
+      const description = $("inspirationDescription").value.trim();
+      const style = $("inspirationStyle").value.trim();
+      if (!description && !style) return mainIdea;
+      return `REFERENCE IMAGE DESCRIPTION:\n${description}\nREFERENCE VISUAL STYLE:\n${style}\nUse the reference as the starting point. Preserve its visual style unless an explicit style preset or the user's changes override it. The user's changes take precedence over reference details.\nUSER'S CHANGES:\n${mainIdea || "Recreate the described image and style."}`;
+    }
     const details = [];
     if (mainIdea) details.push(`Overall concept: ${mainIdea}`);
     collectScenes().forEach((scene, index) => {
@@ -490,6 +495,53 @@
     return details.join("\n");
   }
 
+  let inspirationController = null;
+  let inspirationUrl = null;
+  function clearInspiration() {
+    inspirationController?.abort(); inspirationController = null;
+    if (inspirationUrl) URL.revokeObjectURL(inspirationUrl);
+    inspirationUrl = null;
+    $("inspirationPreview").removeAttribute("src");
+    ["inspirationImage", "inspirationDescription", "inspirationStyle"].forEach(id => $(id).value = "");
+    $("inspirationDetails").hidden = true;
+    $("cancelInspiration").hidden = true;
+    $("inspirationStatus").textContent = "";
+  }
+
+  async function describeInspiration() {
+    const file = $("inspirationImage").files[0];
+    if (!file) { $("inspirationStatus").textContent = "Choose an image first."; return; }
+    inspirationController?.abort();
+    const controller = new AbortController(); inspirationController = controller;
+    cancelExampleLoad(); clearTimeout(state.autoRegenerateTimer);
+    const started = Date.now(); let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 310000);
+    const progress = setInterval(() => { if (inspirationController === controller) $("inspirationStatus").textContent = `Describing image locally… ${Math.floor((Date.now()-started)/1000)}s`; }, 1000);
+    if (inspirationUrl) URL.revokeObjectURL(inspirationUrl);
+    inspirationUrl = URL.createObjectURL(file); $("inspirationPreview").src = inspirationUrl;
+    $("inspirationDetails").hidden = false; $("cancelInspiration").hidden = false;
+    $("inspirationDescription").value = ""; $("inspirationStyle").value = "";
+    $("inspirationStatus").textContent = "Preparing image…";
+    try {
+      const prepared = await prepareImage(file);
+      controller.signal.throwIfAborted();
+      const response = await fetch("/api/analyze-image", { method:"POST", signal:controller.signal, headers:{"Content-Type":"application/json"}, body:JSON.stringify({...prepared, target:"image", visionModel:$("visionModel").value.trim(), showThinking:false, nsfwMode:false}) });
+      const text = await response.text();
+      let data; try { data = JSON.parse(text); } catch { throw new Error(`The app returned an invalid response (HTTP ${response.status}). Update or restart it and retry.`); }
+      if (!response.ok) throw new Error(data.error || "Image description failed.");
+      if (inspirationController !== controller || controller.signal.aborted) return;
+      $("inspirationDescription").value = [data.summary, data.subjects, data.pose_and_contact, data.wardrobe_coverage, data.composition, data.environment, data.lighting].filter(Boolean).join("\n");
+      $("inspirationStyle").value = data.visual_style || "";
+      $("style").value = "none";
+      $("inspirationStatus").textContent = "Ready. Add a short prompt above, then click Build prompt from image. The detected style is used unless you choose another preset.";
+    } catch(error) {
+      if (inspirationController === controller) $("inspirationStatus").textContent = timedOut ? "Timed out. Retry when the GPU is idle." : controller.signal.aborted ? "Cancelled. Click Describe image to retry." : error.message;
+    } finally {
+      clearTimeout(timer); clearInterval(progress);
+      if (inspirationController === controller) { inspirationController = null; $("cancelInspiration").hidden = true; }
+    }
+  }
+
   async function prepareImage(file) {
     const bitmap = await createImageBitmap(file); const maxEdge = 1536; const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement("canvas"); canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale);
@@ -498,16 +550,33 @@
     return { mimeType:"image/jpeg", imageBase64:(await new Promise((resolve, reject) => { const reader=new FileReader(); reader.onload=()=>resolve(reader.result.split(",")[1]); reader.onerror=reject; reader.readAsDataURL(blob); })) };
   }
 
+  let imageAnalysisController = null;
+
   async function analyzeReferenceImage(file) {
     if (!file) return;
+    imageAnalysisController?.abort();
+    const controller = new AbortController();
+    imageAnalysisController = controller;
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 310000);
+    const started = Date.now();
+    const progress = setInterval(() => {
+      if (imageAnalysisController !== controller) return;
+      $("imageAnalysisStatus").textContent = `Scanning locally… ${Math.floor((Date.now() - started) / 1000)}s`;
+    }, 1000);
+    $("cancelImageAnalysis").hidden = false;
+    $("retryImageAnalysis").hidden = true;
+    clearTimeout(state.autoRegenerateTimer);
     cancelExampleLoad();
     if (state.imageObjectUrl) URL.revokeObjectURL(state.imageObjectUrl);
     state.imageObjectUrl = URL.createObjectURL(file); $("imagePreview").src = state.imageObjectUrl; $("imageWorkspace").hidden = false;
-    $("imageAnalysisStatus").textContent = "Scanning locally…"; $("imageAnalysisSummary").textContent = "Qwen Vision is reading the first frame."; $("imageQuestions").replaceChildren(); state.imageAnalysis = null;
+    $("imageAnalysisStatus").textContent = "Preparing image…"; $("imageAnalysisSummary").textContent = `Reading the first frame with ${$("visionModel").value.trim()}. Loading a model can take a while, especially while ComfyUI is using the GPU.`; $("imageQuestions").replaceChildren(); state.imageAnalysis = null;
     try {
       const prepared = await prepareImage(file);
-      const response = await fetch("/api/analyze-image", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ ...prepared, visionModel:$("visionModel").value.trim(), nsfwMode:$("nsfwMode").checked, showThinking:$("showThinking").checked }) });
+      if (controller.signal.aborted) throw new DOMException("Analysis cancelled", "AbortError");
+      const response = await fetch("/api/analyze-image", { method:"POST", signal:controller.signal, headers:{"Content-Type":"application/json"}, body:JSON.stringify({ ...prepared, visionModel:$("visionModel").value.trim(), nsfwMode:$("nsfwMode").checked, showThinking:$("showThinking").checked }) });
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Image analysis failed");
+      if (imageAnalysisController !== controller || controller.signal.aborted) return;
       if ($("showThinking").checked) showOllamaThinking(data.ollama_thinking, "image analysis");
       state.imageAnalysis = data; $("imageAnalysisStatus").textContent = `Scanned with ${data.model || $("visionModel").value}`;
       $("imageAnalysisSummary").replaceChildren(...[
@@ -517,8 +586,21 @@
         data.wardrobe_coverage && `Wardrobe coverage: ${data.wardrobe_coverage}`
       ].filter(Boolean).map((text,index) => { const part=document.createElement(index ? "span" : "strong"); part.textContent=text; return part; }));
       renderImageQuestions(data.questions);
+      imageAnalysisController = null;
       autoRegeneratePrompt();
-    } catch (error) { $("imageAnalysisStatus").textContent = "Analysis failed"; $("imageAnalysisSummary").textContent = error.message; }
+    } catch (error) {
+      if (imageAnalysisController !== controller) return;
+      $("imageAnalysisStatus").textContent = controller.signal.aborted && !timedOut ? "Analysis cancelled" : "Analysis failed";
+      $("imageAnalysisSummary").textContent = timedOut ? "Image analysis timed out. Try the 8B vision model or retry when ComfyUI is idle." : controller.signal.aborted ? "You can retry this image or choose another one." : `${error.message} Try the 8B vision model or retry when ComfyUI is idle.`;
+    } finally {
+      clearTimeout(timeout);
+      clearInterval(progress);
+      if (imageAnalysisController === controller || imageAnalysisController === null) {
+        imageAnalysisController = null;
+        $("cancelImageAnalysis").hidden = true;
+        $("retryImageAnalysis").hidden = false;
+      }
+    }
   }
 
   function resetKreaEvaluation(clearImage = true) {
@@ -557,6 +639,18 @@
     $(id).replaceChildren(...(items || []).map(value => { const item=document.createElement("li"); item.textContent=value; return item; }));
   }
 
+  async function readKreaEvaluationResponse(response) {
+    if (response.status === 404) throw new Error("The running app is an older version without the Krea image checker. Update and restart the prompt generator, then refresh this page.");
+    const text = await response.text();
+    if (!text.trim()) throw new Error(`The app returned an empty response (HTTP ${response.status}). Restart the prompt generator and retry.`);
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw new Error(`The app returned an incomplete or invalid response (HTTP ${response.status}). Retry the image check.`); }
+    if (!response.ok) throw new Error(data?.error || `Krea result evaluation failed (HTTP ${response.status}).`);
+    if (!data || typeof data !== "object" || typeof data.fidelity_score !== "number") throw new Error("The app returned no valid image evaluation. Retry the image check.");
+    return data;
+  }
+
   async function evaluateKreaResult() {
     if (!state.kreaResultFile) { $("kreaResultImage").click(); return; }
     const prompt = $("positive").value.trim();
@@ -565,8 +659,10 @@
     $("kreaEvaluationStatus").textContent = "Qwen Vision is comparing the generated image with the exact Krea prompt…";
     try {
       const prepared = await prepareImage(state.kreaResultFile);
-      const response = await fetch("/api/evaluate-krea-image", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ prompt, ...prepared, visionModel:$("visionModel").value.trim(), nsfwMode:$("nsfwMode").checked, showThinking:$("showThinking").checked, rememberResult:$("generationMemory").checked }) });
-      const data = await response.json(); if (!response.ok) throw new Error(data.error || "Krea result evaluation failed");
+      const referenceFile = $("kreaCharacterReference").files[0];
+      const reference = referenceFile ? await prepareImage(referenceFile) : null;
+      const response = await fetch("/api/evaluate-krea-image", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ prompt, ...prepared, remarks:$("correctionRemarks").value.trim(), subject:$("correctionSubject").value.trim(), referenceImageBase64:reference?.imageBase64, visionModel:$("visionModel").value.trim(), nsfwMode:$("nsfwMode").checked, showThinking:$("showThinking").checked, rememberResult:$("generationMemory").checked }) });
+      const data = await readKreaEvaluationResponse(response);
       state.kreaEvaluation = data;
       if ($("showThinking").checked) showOllamaThinking(data.ollama_thinking, "Krea result review");
       $("kreaScore").textContent = `${data.fidelity_score ?? 0}%`;
@@ -579,6 +675,11 @@
       $("useKreaFeedback").hidden = !data.refinement_feedback;
       $("kreaEvaluationStatus").textContent = data.remembered ? `Review complete. Learned locally from ${data.memory_count} checked generation${data.memory_count === 1 ? "" : "s"}.` : "Review complete. This result was not added to local memory.";
       updateMemoryStatus(data.memory_count);
+      if (data.saved_character_notes) {
+        $("correctionRemarks").value = data.saved_character_notes;
+        $("correctionStatus").textContent = "Character notes learned locally. Review or edit the notes above, then save any changes.";
+        await loadGenerationMemory();
+      }
     } catch (error) {
       $("kreaEvaluationStatus").textContent = `Could not check the image: ${error.message}`;
     } finally { button.disabled = false; button.firstChild.textContent = "Check against prompt "; }
@@ -593,6 +694,24 @@
     $("refinementFeedback").focus();
   }
 
+  let savedCorrections = [];
+  function renderCorrections(corrections) {
+    savedCorrections = corrections || [];
+    $("savedCorrections").replaceChildren(new Option("Choose notes to edit", ""), ...savedCorrections.map(x => new Option(x.subject, x.subject)));
+  }
+
+  async function saveCharacterCorrection(remove = false) {
+    const subject = $("correctionSubject").value.trim();
+    const remarks = $("correctionRemarks").value.trim();
+    if (!subject || (!remove && !remarks)) { $("correctionStatus").textContent = "Enter a character name and reusable notes first."; return; }
+    try {
+      const response = await fetch("/api/generation-memory/correction", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({subject, remarks:remove ? "" : remarks}) });
+      if (!response.ok) throw new Error("Could not save character notes. Make sure the updated app is running.");
+      renderCorrections((await response.json()).corrections);
+      $("correctionStatus").textContent = remove ? `Forgot ${subject}.` : `Saved ${subject}. These notes apply when that name appears in a future prompt and learning is enabled.`;
+    } catch(error) { $("correctionStatus").textContent = error.message; }
+  }
+
   function updateMemoryStatus(count) {
     const total = Number(count || 0);
     $("memoryStatus").textContent = `${total} learned generation${total === 1 ? "" : "s"}`;
@@ -605,6 +724,7 @@
       const data = await response.json();
       $("generationMemory").checked = data.enabled !== false;
       updateMemoryStatus(data.count);
+      renderCorrections(data.corrections);
     } catch { $("memoryStatus").textContent = "Memory unavailable"; }
   }
 
@@ -621,7 +741,7 @@
     try {
       const response = await fetch("/api/generation-memory", { method:"DELETE" });
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not clear memory");
-      updateMemoryStatus(0); $("kreaEvaluationStatus").textContent = "Local Krea generation memory cleared.";
+      updateMemoryStatus(0); renderCorrections([]); $("kreaEvaluationStatus").textContent = "Local Krea generation memory cleared.";
     } catch (error) { $("kreaEvaluationStatus").textContent = error.message; }
   }
 
@@ -681,6 +801,8 @@
   }
 
   function autoRegeneratePrompt() {
+    if (inspirationController) return;
+    if (imageAnalysisController) return;
     if ($("result").hidden) return;
     clearTimeout(state.autoRegenerateTimer);
     $("engineStatus").textContent = "Setting changed — regenerating the prompt locally…";
@@ -692,10 +814,11 @@
 
   function syncTargetControls() {
     const target = $("target").value;
+    $("imageStartingPoint").hidden = target === "minimax_h3";
     $("profileLabel").hidden = target !== "danbooru";
     $("h3Panel").hidden = target !== "minimax_h3";
     $("kreaReview").hidden = target !== "krea2" || $("result").hidden;
-    if (target === "krea2") $("style").value = "photo";
+    if (target === "krea2") $("style").value = $("inspirationStyle").value.trim() ? "none" : "photo";
     if (target === "minimax_h3" && !$("scenes").children.length) resetScenes();
     syncH3Mode();
   }
@@ -703,6 +826,7 @@
   function syncH3Mode() { $("i2vPanel").hidden = $("target").value !== "minimax_h3" || $("h3Mode").value !== "i2v"; }
 
   function resetPrompt() {
+    clearInspiration();
     state.tags = []; state.interviewAnswers = []; state.interviewAsked = []; state.interviewAskedIds = []; state.interviewTarget = null; state.refinementHistory = []; state.outputFormat = "danbooru";
     $("idea").value = "";
     ["camera", "location", "angle", "pose", "actors", "interaction"].forEach(id => $(id).value = "auto");
@@ -841,6 +965,16 @@
   $("askMore").addEventListener("click", () => requestQuestions(false));
   $("generateNow").addEventListener("click", generatePrompt);
   $("resetPrompt").addEventListener("click", resetPrompt);
+  $("inspirationImage").addEventListener("change", describeInspiration);
+  $("analyzeInspiration").addEventListener("click", describeInspiration);
+  $("buildFromImage").addEventListener("click", async () => {
+    if (inspirationController) { $("inspirationStatus").textContent = "Wait for the image description to finish, or cancel it first."; return; }
+    if (!$("inspirationDescription").value.trim()) { $("inspirationStatus").textContent = "Describe an image first."; return; }
+    const button = $("buildFromImage"); button.disabled = true;
+    try { await generatePrompt(); } finally { button.disabled = false; }
+  });
+  $("cancelInspiration").addEventListener("click", () => inspirationController?.abort());
+  $("clearInspiration").addEventListener("click", clearInspiration);
   $("refinePrompt").addEventListener("click", refinePrompt);
   $("refineQuestions").addEventListener("click", refineWithQuestions);
   $("kreaResultImage").addEventListener("change", event => selectKreaResult(event.target.files[0]));
@@ -848,6 +982,13 @@
   $("useKreaFeedback").addEventListener("click", useKreaFeedback);
   $("generationMemory").addEventListener("change", event => setGenerationMemory(event.target.checked));
   $("clearMemory").addEventListener("click", clearGenerationMemory);
+  $("saveCorrection").addEventListener("click", () => saveCharacterCorrection());
+  $("deleteCorrection").addEventListener("click", () => saveCharacterCorrection(true));
+  $("clearCharacterReference").addEventListener("click", () => { $("kreaCharacterReference").value = ""; });
+  $("savedCorrections").addEventListener("change", () => {
+    const correction = savedCorrections.find(x => x.subject === $("savedCorrections").value);
+    if (correction) { $("correctionSubject").value = correction.subject; $("correctionRemarks").value = correction.remarks; }
+  });
   $("target").addEventListener("change", () => {
     const target = $("target").value;
     const switchedBetweenImageAndVideo = state.interviewTarget && (state.interviewTarget === "minimax_h3") !== (target === "minimax_h3");
@@ -871,6 +1012,8 @@
   $("h3Duration").addEventListener("change", () => { const duration=Number($("h3Duration").value); [...document.querySelectorAll(".scene-end")].forEach(input => { if (Number(input.value) > duration) input.value=duration; }); });
   $("addScene").addEventListener("click", () => { const cards=[...$("scenes").children]; const last=cards.length ? readScene(cards[cards.length-1]) : {end:0}; $("scenes").append(sceneTemplate({start:Math.min(last.end, Number($("h3Duration").value)), end:Number($("h3Duration").value)})); numberScenes(); });
   $("referenceImage").addEventListener("change", event => analyzeReferenceImage(event.target.files[0]));
+  $("cancelImageAnalysis").addEventListener("click", () => imageAnalysisController?.abort());
+  $("retryImageAnalysis").addEventListener("click", () => analyzeReferenceImage($("referenceImage").files[0]));
   $("themeToggle").addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
   $("slogan").addEventListener("click", rollSlogan);
   $("addTag").addEventListener("click", () => addTag());

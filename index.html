@@ -43,6 +43,23 @@
     <section class="composer panel">
       <label for="idea">What would you like to see?</label>
       <textarea id="idea" rows="5" placeholder="Ollama is creating a fresh idea…"></textarea>
+      <div id="imageStartingPoint" class="refinement-card">
+        <label class="image-drop" for="inspirationImage">
+          <input id="inspirationImage" type="file" accept="image/png,image/jpeg,image/webp">
+          <span><strong>Start from an image</strong><small>Describe its look locally, then use the prompt above for your changes.</small></span>
+        </label>
+        <div id="inspirationDetails" hidden>
+          <img id="inspirationPreview" alt="Image prompt reference" style="max-width:100%;max-height:260px;object-fit:contain">
+          <label>Image description <textarea id="inspirationDescription" rows="4" placeholder="Subjects, composition, lighting and setting"></textarea></label>
+          <label>Visual style <textarea id="inspirationStyle" rows="2" placeholder="Medium, linework, shading, colors and texture"></textarea></label>
+          <p>Edit the analysis if needed. Your short prompt takes priority over the reference. Choose a style preset to override the detected style.</p>
+        </div>
+        <p id="inspirationStatus" aria-live="polite"></p>
+        <button id="analyzeInspiration" type="button" class="secondary-action">Describe image</button>
+        <button id="buildFromImage" type="button" class="primary-action">Build prompt from image</button>
+        <button id="cancelInspiration" type="button" class="secondary-action" hidden>Cancel</button>
+        <button id="clearInspiration" type="button" class="text-action">Remove image</button>
+      </div>
       <div class="examples" id="examples" aria-label="Examples">
         <span>Try:</span>
         <button data-example="A cute witch with purple hair flying over a moonlit town, dynamic angle, autumn">moonlit witch</button>
@@ -143,6 +160,8 @@
             <div class="image-analysis-copy">
               <div class="output-label"><span>LOCAL IMAGE ANALYSIS</span><span id="imageAnalysisStatus">Waiting</span></div>
               <p id="imageAnalysisSummary"></p>
+              <button id="cancelImageAnalysis" type="button" hidden>Cancel analysis</button>
+              <button id="retryImageAnalysis" type="button" hidden>Retry analysis</button>
               <div id="imageQuestions" class="image-questions"></div>
             </div>
           </div>
@@ -222,6 +241,19 @@
           <input id="kreaResultImage" type="file" accept="image/png,image/jpeg,image/webp">
           <span><strong>Upload the generated Krea image</strong><small>PNG, JPEG, or WebP · processed only by local Ollama</small></span>
         </label>
+        <div class="refinement-card">
+          <label>Character name <input id="correctionSubject" maxlength="120" placeholder="e.g. Lindsay"></label>
+          <label>Your remarks <textarea id="correctionRemarks" rows="3" maxlength="6000" placeholder="e.g. Lindsay has blonde hair and a blue headband. The generated hair color is wrong."></textarea></label>
+          <label>Optional character reference (second image) <input id="kreaCharacterReference" type="file" accept="image/png,image/jpeg,image/webp"></label>
+          <p>The checker uses your remarks and reference. With learning enabled, a review saves notes under the character name, replacing previous notes for that name. You can also save notes directly below. Saved notes apply when that name appears in future prompts. Images are not saved.</p>
+          <button id="clearCharacterReference" type="button" class="secondary-action">Remove reference</button>
+          <label>Saved character notes <select id="savedCorrections"><option value="">Choose notes to edit</option></select></label>
+          <div class="krea-review-actions">
+            <button id="saveCorrection" type="button" class="secondary-action">Save character notes</button>
+            <button id="deleteCorrection" type="button" class="text-action">Forget this character</button>
+          </div>
+          <p id="correctionStatus" aria-live="polite"></p>
+        </div>
         <div id="kreaEvaluationWorkspace" class="krea-evaluation-workspace" hidden>
           <img id="kreaResultPreview" alt="Generated Krea result preview">
           <div class="krea-evaluation-copy">
