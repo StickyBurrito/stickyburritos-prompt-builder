@@ -281,3 +281,4 @@ button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .thinking-panel summary small{color:var(--muted);font-weight:600;letter-spacing:0;text-transform:none}
 .thinking-panel pre{max-height:360px;margin:0;padding:16px;border-top:1px solid rgba(0,229,255,.18);overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text);font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace}
 .reasoning-toggle{margin:14px 0 22px;border-color:rgba(0,229,255,.42);background:linear-gradient(90deg,rgba(0,229,255,.08),rgba(255,0,145,.07))}
+.image-upload-picker { display:grid; gap:12px; padding:18px; border:1px dashed var(--cyan); border-radius:14px; } .image-upload-picker input[type="file"] { display:block; position:static; width:100%; height:auto; opacity:1; pointer-events:auto; padding:12px; }

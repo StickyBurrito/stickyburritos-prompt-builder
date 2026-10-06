@@ -1,3 +1,18 @@
+# Stickyburrito's Prompt Generator v1.3.2
+
+- Use the responsive 8B vision model for the 32 GB installer tier, avoiding the 32B model's excessive loading and memory pressure.
+- Keep the image upload picker visible and version frontend assets to refresh cached pages.
+
+# Stickyburrito's Prompt Generator v1.3.0
+
+- Start Krea and Danbooru prompts from an uploaded image, with editable descriptions and visual style.
+- Add a short change request and build a prompt directly from the reference.
+- Add remarks and a second character reference to Krea image reviews.
+- Save, edit, and forget named character corrections in local memory.
+- Open and exit the app through its Windows tray icon.
+- Improved image-analysis progress, cancellation, retry, and error messages.
+- Reduced vision context allocation to limit memory use.
+
 # Stickyburrito's Prompt Generator v1.2.0
 
 Local Krea output review and generation-learning update for the ComfyUI prompt companion.

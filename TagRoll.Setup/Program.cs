@@ -16,7 +16,7 @@ internal static class Program
     private const string AppProductName = "Stickyburrito's Prompt Generator";
     private const string AppExecutableName = "Stickyburritos-Prompt-Generator.exe";
     private const string UninstallRegistryPath = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\StickyburritosPromptGenerator";
-    private const string AppProductVersion = "1.2.0";
+    private const string AppProductVersion = "1.3.2";
 
     private static readonly ModelTier[] Tiers =
     [
@@ -25,7 +25,7 @@ internal static class Program
         new("12–15 GB · Qwen 3.6 compact", 12, "richardyoung/qwen3.6-27b-abliterated:IQ3_M", "huihui_ai/qwen3-vl-abliterated:8b-instruct-q4_K_M", "about 19 GB total"),
         new("16–23 GB · Qwen 3.6 recommended", 16, "richardyoung/qwen3.6-27b-abliterated:IQ4_XS", "huihui_ai/qwen3-vl-abliterated:8b-instruct-q4_K_M", "about 21 GB total"),
         new("24–31 GB · High quality", 24, "richardyoung/qwen3.6-27b-abliterated:Q5_K_M", "huihui_ai/qwen3-vl-abliterated:30b-instruct-q4_K_M", "about 39 GB total"),
-        new("32 GB+ · Stable text + maximum vision", 32, "richardyoung/qwen3.6-27b-abliterated:latest", "huihui_ai/qwen3-vl-abliterated:32b-instruct-q4_K_M", "about 36 GB total")
+        new("32 GB+ · Stable text + responsive vision", 32, "richardyoung/qwen3.6-27b-abliterated:latest", "huihui_ai/qwen3-vl-abliterated:8b-instruct-q4_K_M", "about 23 GB total")
     ];
 
     [STAThread]
