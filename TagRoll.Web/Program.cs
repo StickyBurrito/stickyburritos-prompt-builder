@@ -428,10 +428,13 @@ app.MapPost("/api/ollama", async (PromptRequest request, IHttpClientFactory clie
     catch (Exception ex) { return Results.Json(new { error = ex.Message }, statusCode: 500); }
 });
 
+var browserVersion = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "latest";
+string VersionedAddress(string address) => $"{address.TrimEnd('/')}?v={Uri.EscapeDataString(browserVersion)}";
+
 if (args.Contains("--open-browser", StringComparer.OrdinalIgnoreCase))
     app.Lifetime.ApplicationStarted.Register(() =>
     {
-        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("http://localhost:8765") { UseShellExecute = true }); }
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(VersionedAddress("http://localhost:8765")) { UseShellExecute = true }); }
         catch { /* The server remains usable even when Windows cannot open the default browser. */ }
     });
 
@@ -443,7 +446,7 @@ var trayThread = new Thread(() =>
         using var dispatcher = new System.Windows.Forms.Control();
         _ = dispatcher.Handle;
         using var menu = new System.Windows.Forms.ContextMenuStrip();
-        var address = app.Urls.FirstOrDefault() ?? "http://localhost:8765";
+        var address = VersionedAddress(app.Urls.FirstOrDefault() ?? "http://localhost:8765");
         void OpenApp()
         {
             try { Process.Start(new ProcessStartInfo(address) { UseShellExecute = true }); }

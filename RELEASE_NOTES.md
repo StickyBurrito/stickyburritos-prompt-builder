@@ -1,3 +1,8 @@
+# Stickyburrito's Prompt Generator v1.3.3
+
+- Open the prompt generator with a versioned local URL so browsers cannot reuse an interface from an older installation.
+- Refresh the bundled frontend assets when the installed app is updated.
+
 # Stickyburrito's Prompt Generator v1.3.2
 
 - Use the responsive 8B vision model for the 32 GB installer tier, avoiding the 32B model's excessive loading and memory pressure.
