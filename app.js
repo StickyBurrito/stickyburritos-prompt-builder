@@ -888,12 +888,27 @@
   function renderAIVariants(variants) {
     const card = $("variantsCard"); card.hidden = !variants.length;
     if (!variants.length) return;
+    const selectionLabel = $("variantSelection");
+    if (selectionLabel) selectionLabel.textContent = "Click one to use it";
     $("variants").replaceChildren(...variants.map((variant, index) => {
       const natural = state.outputFormat !== "danbooru";
       const content = natural ? (variant.prompt || "") : unique(variant.tags || []);
-      const button = document.createElement("button"); button.className = "variant";
+      const button = document.createElement("button"); button.className = "variant"; button.type = "button"; button.setAttribute("aria-pressed", "false");
       button.innerHTML = `${variant.name || `Variant ${index + 1}`}<small>${natural ? content : content.join(", ")}</small>`;
-      button.addEventListener("click", () => { if (natural) { $("positive").value = content; if (state.outputFormat === "krea2" && state.kreaResultFile) { resetKreaEvaluation(false); $("kreaEvaluationStatus").textContent = "Prompt changed—check the uploaded result again against this variant."; } } else { state.tags = content; render(); } }); return button;
+      button.addEventListener("click", () => {
+        if (natural) {
+          $("positive").value = content;
+          $("positive").dispatchEvent(new Event("input", { bubbles: true }));
+          if (state.outputFormat === "krea2" && state.kreaResultFile) { resetKreaEvaluation(false); $("kreaEvaluationStatus").textContent = "Prompt changed—check the uploaded result again against this variant."; }
+        } else { state.tags = content; render(); }
+        document.querySelectorAll("#variants .variant").forEach(card => { card.classList.remove("selected"); card.setAttribute("aria-pressed", "false"); });
+        button.classList.add("selected"); button.setAttribute("aria-pressed", "true");
+        const name = variant.name || `Variant ${index + 1}`;
+        if (selectionLabel) selectionLabel.textContent = `${name} is now the active prompt`;
+        setEngineStatus(`${name} selected. Copy Prompt and feedback regeneration will use it.`, "success");
+        $("positive").scrollIntoView({ behavior:"smooth", block:"center" });
+        $("positive").focus({ preventScroll:true });
+      }); return button;
     }));
   }
 

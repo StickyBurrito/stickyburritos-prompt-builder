@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Stickyburrito’s Prompt Generator</title>
-  <link rel="stylesheet" href="styles.css?v=1.3.3">
-  <style>.variants-card{padding:20px;margin:30px 0 18px;box-shadow:4px 4px 0 var(--violet)}.variants{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:16px}.variant{padding:13px;border:1.5px solid var(--ink);background:white;text-align:left;cursor:pointer;font-weight:800}.variant small{display:block;margin-top:5px;color:var(--muted);font-weight:500}.variant:hover{background:var(--acid)}@media(max-width:650px){.variants{grid-template-columns:1fr}}</style>
+  <link rel="stylesheet" href="styles.css?v=1.3.4">
+  <style>.variants-card{padding:20px;margin:30px 0 18px;box-shadow:4px 4px 0 var(--violet)}.variants{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:16px}.variant{padding:13px;border:1.5px solid var(--ink);background:white;text-align:left;cursor:pointer;font-weight:800}.variant small{display:block;margin-top:5px;color:var(--muted);font-weight:500}.variant:hover{background:var(--acid)}.variant.selected{background:var(--acid);border-color:var(--violet);box-shadow:3px 3px 0 var(--violet)}.variant.selected::after{content:"\2713  USING THIS VARIANT";display:block;margin-top:10px;color:var(--ink);font-size:.75rem;letter-spacing:.08em}@media(max-width:650px){.variants{grid-template-columns:1fr}}</style>
   <style>.theme-toggle{position:absolute;right:0;top:0;border:1.5px solid var(--ink);background:var(--card);color:var(--ink);padding:9px 12px;font-weight:800;cursor:pointer}[data-theme="dark"]{--ink:#f2f0e7;--paper:#11120f;--card:#1b1d18;--muted:#aaa99e;--line:#41433b;--shadow:6px 6px 0 #6f47ff}[data-theme="dark"] textarea,[data-theme="dark"] input,[data-theme="dark"] select,[data-theme="dark"] .variant,[data-theme="dark"] .suggestions,[data-theme="dark"] .suggestions button{background:#252720;color:#f2f0e7;border-color:#d8d6cb}[data-theme="dark"] .tag{background:#30332a;border-color:#5a5e50}[data-theme="dark"] .lede,[data-theme="dark"] .help p{color:#c0bfb5}</style>
   <style>
     [data-theme="dark"]{--ink:#ececf3;--paper:#0d0f15;--card:#171a23;--acid:#c9f36a;--violet:#9183ff;--muted:#9398a8;--line:#303545;--shadow:0 18px 55px rgba(0,0,0,.35)}
@@ -25,11 +25,13 @@
     [data-theme="dark"] .variants-card{box-shadow:0 14px 38px rgba(0,0,0,.25);border-color:#4a426f}
     [data-theme="dark"] .variant{background:#11141d;color:#e8e8f0;border:1px solid #353b4c;border-radius:9px}
     [data-theme="dark"] .variant:hover{background:#24283a;border-color:#9183ff}
+    [data-theme="dark"] .variant.selected{background:#302859;border-color:#00d7ff;box-shadow:0 0 0 2px rgba(0,215,255,.22)}
+    [data-theme="dark"] .variant.selected::after{color:#8feeff}
     [data-theme="dark"] .tag{background:#282d3b;border:1px solid #3b4255;border-radius:999px;color:#dedee8}
     [data-theme="dark"] .suggestions,[data-theme="dark"] .suggestions button{background:#171b25;color:#ececf3;border-color:#353b4c}
     [data-theme="dark"] .suggestions button:hover{background:#292e40}
   </style>
-  <link rel="stylesheet" href="theme.css?v=1.3.3">
+  <link rel="stylesheet" href="theme.css?v=1.3.4">
 </head>
 <body>
   <main class="shell">
@@ -225,7 +227,7 @@
       </div>
 
       <div id="variantsCard" class="panel variants-card" hidden>
-        <div class="output-label"><span>CAMERA VARIANTS</span><span>Click one to use it</span></div>
+        <div class="output-label"><span>CAMERA VARIANTS</span><span id="variantSelection">Click one to use it</span></div>
         <div id="variants" class="variants"></div>
       </div>
 
@@ -304,6 +306,6 @@
     <span>Danbooru · Pony V6 · Krea 2 · MiniMax H3 · Local Ollama generation</span>
     <a class="paypal-link" href="https://paypal.me/StickyBurrito" target="_blank" rel="noopener noreferrer" aria-label="Support Stickyburrito with PayPal" title="Support with PayPal">P</a>
   </footer>
-  <script src="app.js?v=1.3.3"></script>
+  <script src="app.js?v=1.3.4"></script>
 </body>
 </html>

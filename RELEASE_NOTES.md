@@ -1,4 +1,6 @@
-# Stickyburrito's Prompt Generator v1.3.3
+# Stickyburrito's Prompt Generator v1.3.4
+
+- Fixed camera variant cards so clicking one visibly selects it and makes it the active prompt used by copying and feedback regeneration.
 
 - Open the prompt generator with a versioned local URL so browsers cannot reuse an interface from an older installation.
 - Refresh the bundled frontend assets when the installed app is updated.
