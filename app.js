@@ -396,7 +396,7 @@
     $("askMore").disabled = true; $("generateNow").disabled = true;
     const liveThinking = $("showThinking").checked ? beginLiveThinking("the interview batch") : { requestId:null, stop:()=>{} };
     try {
-      const response = await fetch("/api/interview", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ idea, model:$("model").value.trim(), target, checkpointProfile:$("checkpointProfile").value, answers:state.interviewAnswers, askedQuestions:state.interviewAsked, askedQuestionIds:state.interviewAskedIds, nsfwMode:$("nsfwMode").checked, requestId:liveThinking.requestId, showThinking:$("showThinking").checked }) });
+      const response = await fetch("/api/interview", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ idea, model:$("model").value.trim(), target, h3Mode:$("h3Mode").value, imageAnalysis:state.imageAnalysis ? JSON.stringify(state.imageAnalysis) : null, imageAnswers:collectImageAnswers(), checkpointProfile:$("checkpointProfile").value, answers:state.interviewAnswers, askedQuestions:state.interviewAsked, askedQuestionIds:state.interviewAskedIds, nsfwMode:$("nsfwMode").checked, requestId:liveThinking.requestId, showThinking:$("showThinking").checked }) });
       const data = await response.json(); if (!response.ok) throw new Error(data.error || "Interview request failed");
       if ($("showThinking").checked) showOllamaThinking(data.ollama_thinking, "the interview batch");
       const seen = new Set(state.interviewAsked.map(normalizeQuestion));
@@ -415,7 +415,7 @@
         renderQuestions(fresh);
         $("askMore").hidden = false;
         $("askMore").textContent = "Ask next questions";
-      } else if (totalExplored >= interviewQuestionTarget) {
+      } else if (totalExplored >= interviewQuestionTarget || (target === "minimax_h3" && $("h3Mode").value === "i2v" && !(data.questions || []).length)) {
         $("questions").innerHTML = '<div class="interview-complete"><span>✓</span><div><strong>Interview complete</strong><p>No useful questions remain. Generate the prompt whenever you’re ready.</p></div></div>';
         $("askMore").hidden = true;
       } else {
